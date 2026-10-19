@@ -41,7 +41,7 @@ public class EntryReadServiceBatchProbeParityTests : IDisposable
         _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId, "test", _statements);
         _context = _db.CreateContext();
 
-        var factory = new TestTenantDbContextFactory(_context);
+        var factory = new TestNocturneDbContextFactory(_context);
         var audit = new Mock<IAuditContext>().Object;
         var demoMode = new Mock<IDemoModeService>();
         demoMode.Setup(d => d.IsEnabled).Returns(false);

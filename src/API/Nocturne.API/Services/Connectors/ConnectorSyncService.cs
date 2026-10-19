@@ -1,4 +1,5 @@
-using Nocturne.API.Services.Audit;
+using Nocturne.Core.Contracts.Connectors;
+using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -101,14 +102,9 @@ public class ConnectorSyncService : IConnectorSyncService
 
         try
         {
-            using var scope = _serviceProvider.CreateScope();
-
-            if (_tenantAccessor.Context is { } tenantContext)
-            {
-                var scopedTenantAccessor =
-                    scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                scopedTenantAccessor.SetTenant(tenantContext);
-            }
+            // Attributed as ConnectorBackgroundService attributes a scheduled sync.
+            await using var scope = TenantJobScope.Open(
+                _serviceProvider, _tenantAccessor.Context, $"connector:{ConnectorNames.Canonical(connectorId)}");
 
             var executors = scope.ServiceProvider.GetServices<IConnectorSyncExecutor>();
             var executor = executors.FirstOrDefault(e =>
@@ -124,10 +120,6 @@ public class ConnectorSyncService : IConnectorSyncService
                     Message = $"Unknown connector: {connectorId}",
                 };
             }
-
-            // Attributed as ConnectorBackgroundService attributes a scheduled sync.
-            using var systemScope = SystemAuditScope.PushForScope(
-                scope.ServiceProvider, $"connector:{executor.ConnectorId}");
 
             var result = await executor.ExecuteSyncAsync(scope.ServiceProvider, request, ct, _progressReporter);
 

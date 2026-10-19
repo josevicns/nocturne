@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -35,6 +36,16 @@ public sealed class FindQuery
 
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
+    private static readonly Regex RegexLiteral = new("^/(.*)/([a-z]*)$", RegexOptions.None, RegexTimeout);
+
+    /// <summary>
+    /// Treatment fields on which legacy Nightscout reads a bare <c>/pattern/flags</c> value as a
+    /// regular expression. Pass to <see cref="Parse(string?, IReadOnlySet{string}?)"/> from
+    /// treatment queries only: other collections compare such a value literally.
+    /// </summary>
+    public static readonly IReadOnlySet<string> TreatmentBareRegexFields =
+        new[] { "eventType", "notes", "enteredBy" }.ToFrozenSet(StringComparer.Ordinal);
+
     /// <summary>
     /// Synthetic operator for a find[...] key the parser couldn't interpret. It never matches, so
     /// an unsupported filter narrows results to nothing (fail closed) instead of being dropped.
@@ -59,8 +70,17 @@ public sealed class FindQuery
     /// <summary>Inclusive upper time bound in Unix milliseconds, if the query constrains one.</summary>
     public long? ToMills { get; }
 
-    /// <summary><c>true</c> when the query contains no conditions at all.</summary>
-    public bool IsEmpty => _root.Children.Count == 0;
+    /// <summary>
+    /// <c>true</c> when the query carries no condition a caller could honour: nothing at all, only
+    /// empty <c>$and</c>/<c>$or</c> groups or operand objects, or only <c>find[…]</c> keys the parser
+    /// could not interpret.
+    /// </summary>
+    public bool IsEmpty => !HasLeafCondition(_root);
+
+    private static bool HasLeafCondition(Group group) =>
+        group.Children.Any(child => child is Condition cond
+            ? cond.Op != UnsupportedOp
+            : child is Group nested && HasLeafCondition(nested));
 
     /// <summary>
     /// <c>true</c> when the query contains conditions beyond the extracted
@@ -138,7 +158,14 @@ public sealed class FindQuery
     /// Parses a find query from either wire form. A null/empty/unparseable input yields
     /// <see cref="Empty"/> (no filtering), matching the legacy server's lenient behavior.
     /// </summary>
-    public static FindQuery Parse(string? find)
+    public static FindQuery Parse(string? find) => Parse(find, bareRegexFields: null);
+
+    /// <summary>
+    /// Parses a find query, additionally reading a bare querystring operand of the form
+    /// <c>/pattern/flags</c> on one of <paramref name="bareRegexFields"/> as a <c>$regex</c>.
+    /// Only top-level fields are read this way, not those inside <c>$and</c>/<c>$or</c> clauses. An explicit operator is never rewritten.
+    /// </summary>
+    public static FindQuery Parse(string? find, IReadOnlySet<string>? bareRegexFields)
     {
         if (string.IsNullOrWhiteSpace(find) || find.Trim() == "{}")
             return Empty;
@@ -156,7 +183,7 @@ public sealed class FindQuery
             else if (find.Contains("find[", StringComparison.OrdinalIgnoreCase)
                 || find.Contains("find%5B", StringComparison.OrdinalIgnoreCase))
             {
-                root = ParseQueryString(find);
+                root = ParseQueryString(find, bareRegexFields);
             }
             else
             {
@@ -217,7 +244,7 @@ public sealed class FindQuery
 
     #region Parsing — querystring form
 
-    private static Group ParseQueryString(string queryString)
+    private static Group ParseQueryString(string queryString, IReadOnlySet<string>? bareRegexFields)
     {
         var parsed = HttpUtility.ParseQueryString(queryString);
 
@@ -236,14 +263,17 @@ public sealed class FindQuery
             if (values is null)
                 continue;
 
-            if (!TryParseFindKey(key, out var groupKey, out var field, out var op))
+            if (!TryParseFindKey(key, out var groupKey, out var field, out var op, out var opIsImplicit))
             {
                 entries.Add(("", "", UnsupportedOp, ""));
                 continue;
             }
 
+            var readsBareRegex = groupKey.Length == 0 && opIsImplicit && bareRegexFields?.Contains(field) == true;
             foreach (var value in values)
-                entries.Add((groupKey, field, op, value));
+                entries.Add(readsBareRegex && RegexLiteral.IsMatch(value)
+                    ? (groupKey, field, "$regex", value)
+                    : (groupKey, field, op, value));
         }
 
         // Repeated $in/$nin params for one field form a single value set, not AND'ed conditions
@@ -309,11 +339,13 @@ public sealed class FindQuery
     /// (<c>find[a][b]</c> → <c>a.b</c>), the <c>find[field][$in][]</c> array marker, and
     /// <c>find[$and|$or][N][field…][$op]</c> group clauses.
     /// </summary>
-    private static bool TryParseFindKey(string key, out string groupKey, out string field, out string op)
+    private static bool TryParseFindKey(
+        string key, out string groupKey, out string field, out string op, out bool opIsImplicit)
     {
         groupKey = "";
         field = "";
         op = "$eq";
+        opIsImplicit = true;
 
         if (!Regex.IsMatch(key, @"^find(\[[^\]]*\])+$"))
             return false;
@@ -339,6 +371,7 @@ public sealed class FindQuery
         if (segments[^1].StartsWith('$'))
         {
             op = segments[^1];
+            opIsImplicit = false;
             segments.RemoveAt(segments.Count - 1);
         }
 
@@ -774,7 +807,7 @@ public sealed class FindQuery
         var flags = cond.RegexOptions ?? string.Empty;
 
         // Accept the /pattern/flags literal form
-        var literal = Regex.Match(pattern, "^/(.*)/([a-z]*)$");
+        var literal = RegexLiteral.Match(pattern);
         if (literal.Success)
         {
             pattern = literal.Groups[1].Value;

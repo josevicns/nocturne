@@ -53,6 +53,27 @@ public class FindQueryTests
         query.Matches(Doc("""{"anything":1}""")).Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("find[]=")]
+    [InlineData("find[]=x&token=y")]
+    [InlineData("{\"$and\":[]}")]
+    [InlineData("{\"$or\":[{}]}")]
+    [InlineData("{\"date\":{}}")]
+    public void IsEmpty_WhenNoConditionCanBeHonoured_IsTrue(string find)
+    {
+        FindQuery.Parse(find).IsEmpty.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("find[type]=sgv")]
+    [InlineData("find[]=x&find[type]=sgv")]
+    [InlineData("{\"$and\":[{\"type\":\"sgv\"}]}")]
+    [InlineData("{\"date\":{\"$gte\":1704067200000}}")]
+    public void IsEmpty_WhenAConditionCanBeHonoured_IsFalse(string find)
+    {
+        FindQuery.Parse(find).IsEmpty.Should().BeFalse();
+    }
+
     [Fact]
     public void Parse_MalformedJson_YieldsEmptyQuery()
     {
@@ -617,6 +638,85 @@ public class FindQueryTests
 
         query.Matches(Doc("""{"notes":"see find3 above"}""")).Should().BeTrue();
         query.Matches(Doc("""{"notes":"nothing"}""")).Should().BeFalse();
+    }
+
+    #endregion
+
+    #region Bare /pattern/flags on treatment fields
+
+    [Theory]
+    [InlineData("eventType", "Meal Bolus")]
+    [InlineData("eventType", "Correction Bolus")]
+    [InlineData("notes", "Bolus for lunch")]
+    [InlineData("enteredBy", "BOLUS-app")]
+    public void BareRegexLiteral_OnATreatmentField_MatchesAsARegexWithItsFlags(string field, string value)
+    {
+        var query = FindQuery.Parse($"find[{field}]=/bolus/i", FindQuery.TreatmentBareRegexFields);
+
+        query.Matches(Doc($$"""{"{{field}}":"{{value}}"}""")).Should().BeTrue();
+        query.Matches(Doc($$"""{"{{field}}":"Note"}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void BareRegexLiteral_WithoutTheCaseFlag_IsCaseSensitive()
+    {
+        var query = FindQuery.Parse("find[eventType]=/bolus/", FindQuery.TreatmentBareRegexFields);
+
+        query.Matches(Doc("""{"eventType":"Meal Bolus"}""")).Should().BeFalse();
+        query.Matches(Doc("""{"eventType":"meal bolus"}""")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void BareRegexLiteral_UrlEncoded_MatchesAsARegex()
+    {
+        var query = FindQuery.Parse("find%5BeventType%5D=%2FBG%20Check%2Fi", FindQuery.TreatmentBareRegexFields);
+
+        query.Matches(Doc("""{"eventType":"bg check"}""")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void BareRegexLiteral_OnAnotherField_StaysLiteral()
+    {
+        var query = FindQuery.Parse("find[insulin]=/2/", FindQuery.TreatmentBareRegexFields);
+
+        query.Matches(Doc("""{"insulin":"/2/"}""")).Should().BeTrue();
+        query.Matches(Doc("""{"insulin":"2"}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void BareRegexLiteral_WithoutTheFieldSet_StaysLiteral()
+    {
+        var query = FindQuery.Parse("find[eventType]=/bolus/i");
+
+        query.Matches(Doc("""{"eventType":"/bolus/i"}""")).Should().BeTrue();
+        query.Matches(Doc("""{"eventType":"Meal Bolus"}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ExplicitEq_OnATreatmentField_StaysLiteral()
+    {
+        var query = FindQuery.Parse("find[eventType][$eq]=/bolus/i", FindQuery.TreatmentBareRegexFields);
+
+        query.Matches(Doc("""{"eventType":"/bolus/i"}""")).Should().BeTrue();
+        query.Matches(Doc("""{"eventType":"Meal Bolus"}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void BareValueWithoutSlashes_OnATreatmentField_StaysLiteral()
+    {
+        var query = FindQuery.Parse("find[eventType]=Meal Bolus", FindQuery.TreatmentBareRegexFields);
+
+        query.Matches(Doc("""{"eventType":"Meal Bolus"}""")).Should().BeTrue();
+        query.Matches(Doc("""{"eventType":"Correction Bolus"}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void BareRegexLiteral_InsideAGroupClause_StaysLiteral()
+    {
+        var query = FindQuery.Parse("find[$or][0][eventType]=/bolus/i", FindQuery.TreatmentBareRegexFields);
+
+        query.Matches(Doc("""{"eventType":"/bolus/i"}""")).Should().BeTrue();
+        query.Matches(Doc("""{"eventType":"Meal Bolus"}""")).Should().BeFalse();
     }
 
     #endregion

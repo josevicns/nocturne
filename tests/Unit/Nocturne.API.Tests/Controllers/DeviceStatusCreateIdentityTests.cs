@@ -40,6 +40,7 @@ public class DeviceStatusCreateIdentityTests
     }
 
     private DeviceStatusProjectionService Projection() => new(
+        Mock.Of<IDeviceStatusGroupRepository>(),
         Mock.Of<IApsSnapshotRepository>(),
         Mock.Of<IPumpSnapshotRepository>(),
         _uploaderRepo.Object,
@@ -107,7 +108,8 @@ public class DeviceStatusCreateIdentityTests
         var wireId = MongoObjectId.Coerce("loop-status-7");
         body.GetProperty("isDeduplication").GetBoolean().Should().BeTrue();
         body.GetProperty("identifier").GetString().Should().Be(wireId);
-        body.GetProperty("deduplicatedIdentifier").GetString().Should().Be(wireId);
+        body.GetProperty("status").GetInt32().Should().Be(200);
+        body.TryGetProperty("lastModified", out _).Should().BeTrue();
         _decomposed.Should().BeEmpty();
     }
 

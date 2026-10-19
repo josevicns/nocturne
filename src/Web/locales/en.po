@@ -1740,7 +1740,6 @@ msgid "Carbs:"
 msgstr "Carbs:"
 
 #. 0: stats.totalCarbs.toFixed(0)
-#. 0: monthSummary.avgDailyCarbs.toFixed(0)
 #. 0: carbs
 #. 0: totalCarbs
 #. 0: carbIntake.carbs ?? 0
@@ -1762,7 +1761,6 @@ msgstr "Carbs:"
 #. 0: (summary?.totals?.food?.carbs ?? 0).toFixed(0)
 #. 0: row.carbs
 #: src/lib/components/calendar/CalendarDayCell.svelte
-#: src/lib/components/calendar/CalendarMonthSummary.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/CarbMarker.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
 #: src/lib/components/dashboard/widgets/MealsWidget.svelte
@@ -1792,7 +1790,6 @@ msgstr "Bolus:"
 
 #. 0: stats.totalBolus.toFixed(1)
 #. 0: stats.totalBasal.toFixed(1)
-#. 0: monthSummary.tdd.toFixed(1)
 #. 0: units.toFixed(1)
 #. 0: insulin.toFixed(1)
 #. 0: formatInsulinDisplay(bolus.insulin)
@@ -1806,7 +1803,6 @@ msgstr "Bolus:"
 #. 0: (row.insulin ?? 0).toFixed(2)
 #: src/lib/components/calendar/CalendarDayCell.svelte
 #: src/lib/components/calendar/CalendarDayCell.svelte
-#: src/lib/components/calendar/CalendarMonthSummary.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BasalInjectionMarker.svelte
 #: src/lib/components/dashboard/glucose-chart/markers/BolusMarker.svelte
 #: src/lib/components/meals/MealBolusDialog.svelte
@@ -3460,7 +3456,6 @@ msgstr "Devices"
 msgid "Insulins"
 msgstr "Insulins"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
@@ -4254,7 +4249,6 @@ msgstr "Boost"
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/icons/PumpModeIcon.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
@@ -4451,7 +4445,6 @@ msgid "Time Spans"
 msgstr "Time Spans"
 
 #: ../portal/src/routes/features/+page.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
@@ -4509,7 +4502,6 @@ msgid "Setup"
 msgstr "Setup"
 
 #: src/lib/components/layout/UserMenu.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/account/+page.svelte
@@ -4517,7 +4509,6 @@ msgstr "Setup"
 msgid "Account"
 msgstr "Account"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/patient/+page.svelte
 msgid "Patient Record"
@@ -5558,10 +5549,6 @@ msgid "No time blocks configured. Click \"Add Time Block\" to get started."
 msgstr "No time blocks configured. Click \"Add Time Block\" to get started."
 
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
@@ -5571,8 +5558,6 @@ msgstr "No time blocks configured. Click \"Add Time Block\" to get started."
 msgid "No access"
 msgstr "No access"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
@@ -5580,14 +5565,11 @@ msgstr "No access"
 msgid "Read"
 msgstr "Read"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Read & Write"
 msgstr "Read & Write"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
@@ -5599,13 +5581,11 @@ msgstr "Read & Write"
 msgid "Full access"
 msgstr "Full access"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Blood Glucose"
 msgstr "Blood Glucose"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
@@ -5613,53 +5593,43 @@ msgstr "Blood Glucose"
 msgid "Treatments"
 msgstr "Treatments"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Identity"
 msgstr "Identity"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/routes/(authenticated)/settings/admin/+page.svelte
 msgid "Administration"
 msgstr "Administration"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 msgid "Manage Roles"
 msgstr "Manage Roles"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 msgid "Invite Members"
 msgstr "Invite Members"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 msgid "Manage Members"
 msgstr "Manage Members"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 msgid "Tenant Settings"
 msgstr "Tenant Settings"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 msgid "Manage Sharing"
 msgstr "Manage Sharing"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Audit"
-msgstr "Audit"
+#~ msgid "Audit"
+#~ msgstr "Audit"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 msgid "View Audit Logs"
 msgstr "View Audit Logs"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 msgid "Manage Audit Settings"
 msgstr "Manage Audit Settings"
@@ -6132,10 +6102,8 @@ msgstr "Total:"
 msgid "Click to view"
 msgstr "Click to view"
 
-#. 0: reliability.daysOfData ?? 0; 1: reliability.recommendedMinimumDays ?? 14
-#: src/lib/components/reports/ReliabilityBadge.svelte
-msgid "Based on {0} days of data ({1} recommended)"
-msgstr "Based on {0} days of data ({1} recommended)"
+#~ msgid "Based on {0} days of data ({1} recommended)"
+#~ msgstr "Based on {0} days of data ({1} recommended)"
 
 #~ msgid "Period Averages"
 #~ msgstr "Period Averages"
@@ -7147,7 +7115,6 @@ msgstr "Flash on alarms"
 msgid "Flash the title and favicon during urgent glucose levels"
 msgstr "Flash the title and favicon during urgent glucose levels"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
@@ -7155,7 +7122,6 @@ msgstr "Flash the title and favicon during urgent glucose levels"
 msgid "Heart Rate"
 msgstr "Heart Rate"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
@@ -13249,7 +13215,6 @@ msgid "Member updated successfully."
 msgstr "Member updated successfully."
 
 #: src/routes/(authenticated)/settings/members/+page.svelte
-#: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "Failed to update member. Please try again."
 msgstr "Failed to update member. Please try again."
 
@@ -13428,9 +13393,8 @@ msgstr "Failed to load migration data"
 msgid "Failed to cancel migration"
 msgstr "Failed to cancel migration"
 
-#: src/routes/(authenticated)/settings/migration/+page.svelte
-msgid "Validating"
-msgstr "Validating"
+#~ msgid "Validating"
+#~ msgstr "Validating"
 
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
@@ -14624,6 +14588,7 @@ msgid "Data is {0} old"
 msgstr "Data is {0} old"
 
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
 msgid "Inferred"
 msgstr "Inferred"
 
@@ -17622,119 +17587,95 @@ msgstr "Continue to Sign Up"
 msgid "{0}g carbs · {1}% match"
 msgstr "{0}g carbs · {1}% match"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "CGM readings and manual blood glucose entries"
 msgstr "CGM readings and manual blood glucose entries"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Insulin doses, carb entries, and therapy events"
 msgstr "Insulin doses, carb entries, and therapy events"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 msgid "Device Status"
 msgstr "Device Status"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Pump, CGM, and phone status reports"
 msgstr "Pump, CGM, and phone status reports"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Heart rate data from wearables"
 msgstr "Heart rate data from wearables"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Daily step counts from activity trackers"
 msgstr "Daily step counts from activity trackers"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 msgid "Food & Meals"
 msgstr "Food & Meals"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Food database entries and nutritional information"
 msgstr "Food database entries and nutritional information"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Statistics"
-msgstr "Statistics"
+#~ msgid "Statistics"
+#~ msgstr "Statistics"
 
 #~ msgid "Time-in-range, A1c estimates, and averages"
 #~ msgstr "Time-in-range, A1c estimates, and averages"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Generated reports and data exports"
 msgstr "Generated reports and data exports"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Therapy Settings"
 msgstr "Therapy Settings"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 msgid "Treatment Profile"
 msgstr "Treatment Profile"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Basal rates, sensitivity factors, carb ratios, and targets"
 msgstr "Basal rates, sensitivity factors, carb ratios, and targets"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Alert rules, notification delivery, and history"
 msgstr "Alert rules, notification delivery, and history"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Display name, email, and account details"
 msgstr "Display name, email, and account details"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Create, edit, and delete roles"
-msgstr "Create, edit, and delete roles"
+#~ msgid "Create, edit, and delete roles"
+#~ msgstr "Create, edit, and delete roles"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Create and send invite links"
-msgstr "Create and send invite links"
+#~ msgid "Create and send invite links"
+#~ msgstr "Create and send invite links"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Edit member roles and remove members"
-msgstr "Edit member roles and remove members"
+#~ msgid "Edit member roles and remove members"
+#~ msgstr "Edit member roles and remove members"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Site name, units, and preferences"
-msgstr "Site name, units, and preferences"
+#~ msgid "Site name, units, and preferences"
+#~ msgstr "Site name, units, and preferences"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Public sharing and follower configuration"
-msgstr "Public sharing and follower configuration"
+#~ msgid "Public sharing and follower configuration"
+#~ msgstr "Public sharing and follower configuration"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 msgid "Guest Links"
 msgstr "Guest Links"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Create and revoke temporary guest access links"
-msgstr "Create and revoke temporary guest access links"
+#~ msgid "Create and revoke temporary guest access links"
+#~ msgstr "Create and revoke temporary guest access links"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Read the history of data changes"
-msgstr "Read the history of data changes"
+#~ msgid "Read the history of data changes"
+#~ msgstr "Read the history of data changes"
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Configure audit retention and export"
-msgstr "Configure audit retention and export"
+#~ msgid "Configure audit retention and export"
+#~ msgstr "Configure audit retention and export"
 
 #~ msgid "Are you sure you want to delete this profile? This action cannot be undone."
 #~ msgstr "Are you sure you want to delete this profile? This action cannot be undone."
@@ -21762,7 +21703,6 @@ msgstr "Prefer not to say"
 msgid "We couldn't save your patient record. Your changes are still here — please try again."
 msgstr "We couldn't save your patient record. Your changes are still here — please try again."
 
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 msgid "Sleep sessions, stages, and overnight biometrics"
 msgstr "Sleep sessions, stages, and overnight biometrics"
@@ -24066,7 +24006,7 @@ msgstr "Showing {0} of {1} records <0/> <1/>"
 msgid "{0} print:stroke-2"
 msgstr "{0} print:stroke-2"
 
-#. 0: bg(lowThreshold); 1: bg(highThreshold)
+#. 0: bg(lowThreshold, glucoseUnits); 1: bg(highThreshold, glucoseUnits)
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 msgid "Range limits {0} / {1}"
 msgstr "Range limits {0} / {1}"
@@ -25010,9 +24950,8 @@ msgstr "<0/> Message copied"
 msgid "<0/> Copy invitation message"
 msgstr "<0/> Copy invitation message"
 
-#: src/lib/components/members/CreateInviteCard.svelte
-msgid "Couldn't copy the message to the clipboard. Copy the link manually instead."
-msgstr "Couldn't copy the message to the clipboard. Copy the link manually instead."
+#~ msgid "Couldn't copy the message to the clipboard. Copy the link manually instead."
+#~ msgstr "Couldn't copy the message to the clipboard. Copy the link manually instead."
 
 #: src/lib/components/members/InviteSummary.svelte
 msgid "the person who sent it"
@@ -26528,10 +26467,8 @@ msgstr "Estimated {0}"
 msgid "How your {0} has trended over the years"
 msgstr "How your {0} has trended over the years"
 
-#. 0: a1cLabel(true)
-#: src/lib/components/rbac/PermissionCategorySelector.svelte
-msgid "Time-in-range, {0} estimates, and averages"
-msgstr "Time-in-range, {0} estimates, and averages"
+#~ msgid "Time-in-range, {0} estimates, and averages"
+#~ msgstr "Time-in-range, {0} estimates, and averages"
 
 #. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -26776,3 +26713,42 @@ msgstr "Skip this step if you gave the installer a DuckDNS token. For a DuckDNS 
 #: ../portal/src/routes/docs/installation/oracle-cloud/+page.svelte
 msgid "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and create the owner account, with a passkey or a sign-in provider. A passkey is your phone's or computer's built-in unlock. If you choose one, register a second device as soon as you can, because there is no password to fall back on."
 msgstr "Once the script reports that Nocturne is answering, open <0/> in a browser. You are taken to the setup page to name your first site and create the owner account, with a passkey or a sign-in provider. A passkey is your phone's or computer's built-in unlock. If you choose one, register a second device as soon as you can, because there is no password to fall back on."
+
+#. 0: daysOfData; 1: daysOfData === 1 ? "day" \\: "days"; 2: reliability.recommendedMinimumDays ?? 14
+#: src/lib/components/reports/ReliabilityBadge.svelte
+msgid "Based on {0} {1} of data ({2} recommended)"
+msgstr "Based on {0} {1} of data ({2} recommended)"
+
+#: src/lib/components/treatments/TreatmentEditDialog.svelte
+msgid "Nocturne inferred this sensor start from the warm-up gap in your CGM's readings. Correct the time if it is off, or delete it if this was not a sensor change."
+msgstr "Nocturne inferred this sensor start from the warm-up gap in your CGM's readings. Correct the time if it is off, or delete it if this was not a sensor change."
+
+#: src/routes/(authenticated)/settings/migration/+page.svelte
+msgid "Failed to read migration status"
+msgstr "Failed to read migration status"
+
+#. 0: year
+#: src/lib/components/reports/year-overview/YearHeatmap.svelte
+msgid "{0} daily chart"
+msgstr "{0} daily chart"
+
+#. 0: year
+#: src/routes/(authenticated)/reports/year-overview/+page.svelte
+msgid "{0} monthly GRI chart"
+msgstr "{0} monthly GRI chart"
+
+#: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
+msgid "Original data"
+msgstr "Original data"
+
+#: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
+msgid "Updated data"
+msgstr "Updated data"
+
+#: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
+msgid "Year chart"
+msgstr "Year chart"
+
+#: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
+msgid "Update data"
+msgstr "Update data"

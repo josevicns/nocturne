@@ -155,6 +155,27 @@ public abstract class DecomposerBase
     protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
         => SystemAuditScope.Push(auditContext);
 
+    /// <summary>
+    /// Runs <paramref name="body"/> with last-seen writes held, then writes each device's once. A
+    /// throwing <paramref name="body"/> discards them instead, so its exception is the one that
+    /// surfaces rather than a flush failure replacing it.
+    /// </summary>
+    protected static async Task DeferLastSeenAsync(IDeviceService deviceService, Func<Task> body, CancellationToken ct)
+    {
+        await using var deferral = deviceService.DeferLastSeen(ct);
+        var completed = false;
+        try
+        {
+            await body();
+            completed = true;
+        }
+        finally
+        {
+            if (!completed)
+                deferral?.Discard();
+        }
+    }
+
     protected static bool TryGetString(Dictionary<string, object> props, string key, out string value)
     {
         value = default!;
@@ -165,6 +186,27 @@ public abstract class DecomposerBase
         if (obj is System.Text.Json.JsonElement el && el.ValueKind == System.Text.Json.JsonValueKind.String)
         { value = el.GetString()!; return true; }
 
+        return false;
+    }
+
+    /// <summary>
+    /// Parses an enum from one defined member name, ignoring case. <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/>
+    /// also accepts numeric strings, comma lists that OR members together and padding, none of which
+    /// an upload's string field can be trusted to mean.
+    /// </summary>
+    protected static bool TryParseDefinedName<TEnum>(string? value, out TEnum result)
+        where TEnum : struct, Enum
+    {
+        foreach (var name in Enum.GetNames<TEnum>())
+        {
+            if (string.Equals(name, value, StringComparison.OrdinalIgnoreCase))
+            {
+                result = Enum.Parse<TEnum>(name);
+                return true;
+            }
+        }
+
+        result = default;
         return false;
     }
 

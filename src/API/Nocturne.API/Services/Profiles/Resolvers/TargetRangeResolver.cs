@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Clinical.Schedules;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -54,6 +55,9 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
         var (_, high) = await ResolveRangeAsync(timeMills, specProfile, ct);
         return high;
     }
+
+    public Task<(double Low, double High)> GetBGTargetRangeAsync(long timeMills, string? specProfile = null, CancellationToken ct = default)
+        => ResolveRangeAsync(timeMills, specProfile, ct);
 
     private async Task<(double Low, double High)> ResolveRangeAsync(
         long timeMills, string? specProfile, CancellationToken ct)

@@ -54,7 +54,7 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
             .Returns(new TenantContext(TenantId, "test", "Test", true, false));
 
         _service = new DataOverviewService(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             therapySettings.Object,
             new Mock<IStatisticsService>().Object,
             new Mock<ICacheService>().Object,

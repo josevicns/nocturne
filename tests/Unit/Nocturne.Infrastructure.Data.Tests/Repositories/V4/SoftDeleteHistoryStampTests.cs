@@ -1,5 +1,4 @@
 using System.Data.Common;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
@@ -8,7 +7,6 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories.V4;
-using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -33,7 +31,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
     public SoftDeleteHistoryStampTests()
     {
         _db = TestDbContextFactory.CreateSqliteWithTenant(
-            TenantId, "test", _statements, new MutationAuditInterceptor(Mock.Of<IHttpContextAccessor>()));
+            TenantId, "test", _statements, new MutationAuditInterceptor());
         _context = _db.CreateContext();
     }
 
@@ -77,7 +75,7 @@ public class SoftDeleteHistoryStampTests : IDisposable
     {
         await SeedAsync(1, legacyId: "65f000000000000000000aaa");
         var repository = new ApsSnapshotRepository(
-            new TestTenantDbContextFactory(_context),
+            new TestNocturneDbContextFactory(_context),
             new SystemAuditContext(),
             NullLogger<ApsSnapshotRepository>.Instance);
         var cursor = new DateTimeOffset(Written, TimeSpan.Zero).ToUnixTimeMilliseconds();
@@ -441,12 +439,12 @@ public class SoftDeleteHistoryStampTests : IDisposable
     }
 
     /// <summary>Hands out fresh contexts carrying a user's audit context, as a request's factory does.</summary>
-    private sealed class AuditedFactory(SqliteTestDatabase db, IAuditContext audit) : ITenantDbContextFactory
+    private sealed class AuditedFactory(SqliteTestDatabase db, IAuditContext audit) : SingleReaderDbContextFactory
     {
-        public ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
+        public override ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
         {
             var ctx = db.CreateContext();
-            ctx.AuditContext = audit;
+            ctx.AttributedTo(audit);
             return ValueTask.FromResult(ctx);
         }
     }
