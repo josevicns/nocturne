@@ -677,11 +677,13 @@ msgstr "<0/> Log Out"
 msgid "Glucose"
 msgstr "Glucose"
 
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/actogram/Actogram.svelte
 #: src/lib/components/actogram/Actogram.svelte
 msgid "ArrowDown"
 msgstr "ArrowDown"
 
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/actogram/Actogram.svelte
 msgid "ArrowUp"
 msgstr "ArrowUp"
@@ -877,6 +879,7 @@ msgstr "Permissions"
 msgid "Custom Permission"
 msgstr "Custom Permission"
 
+#: ../cms/src/editor/ComponentPropsEditor.svelte
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
@@ -1184,11 +1187,13 @@ msgstr "by {0}"
 msgid "Page {0} of {1} ({2} total)"
 msgstr "Page {0} of {1} ({2} total)"
 
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Previous"
 msgstr "Previous"
 
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Next"
@@ -1406,6 +1411,8 @@ msgstr "Timezone"
 #~ msgid "{0}m <0/>"
 #~ msgstr "{0}m <0/>"
 
+#: ../cms/src/editor/ComponentPropsEditor.svelte
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/reports/sleep/SleepCompositionChart.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
@@ -2019,6 +2026,7 @@ msgstr "Undo (Ctrl+Z)"
 msgid "Redo (Ctrl+Shift+Z)"
 msgstr "Redo (Ctrl+Shift+Z)"
 
+#: ../cms/src/editor/PreviewPane.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 msgid "Preview"
@@ -2217,6 +2225,7 @@ msgstr "System"
 msgid "Weight"
 msgstr "Weight"
 
+#: ../cms/src/lib/components/edra/shadcn/components/toolbar/FontSize.svelte
 #: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
 #: src/routes/(authenticated)/food/GiLabel.svelte
@@ -2519,9 +2528,8 @@ msgstr "Connector Disabled"
 msgid "Connector Not Running"
 msgstr "Connector Not Running"
 
-#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-msgid "Total records"
-msgstr "Total records"
+#~ msgid "Total records"
+#~ msgstr "Total records"
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
@@ -3584,6 +3592,7 @@ msgstr "Last 24 hours"
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
+#: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -3640,6 +3649,7 @@ msgstr "Edit Food"
 msgid "Add Food"
 msgstr "Add Food"
 
+#: ../cms/src/editor/ContentEditor.svelte
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
@@ -4915,6 +4925,7 @@ msgstr "Who is this for?"
 msgid "No guest links yet. Create one to share temporary read-only access."
 msgstr "No guest links yet. Create one to share temporary read-only access."
 
+#: ../cms/src/editor/ContentSidebar.svelte
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
@@ -6205,6 +6216,7 @@ msgstr "Temp"
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
+#: src/routes/(authenticated)/alerts/dnd/+page.svelte
 msgid "Scheduled"
 msgstr "Scheduled"
 
@@ -6858,10 +6870,8 @@ msgstr "<0/> Stale"
 msgid "<0/> Inactive"
 msgstr "<0/> Inactive"
 
-#. 0: formatNumber(totalEntries)
 #. 0: formatNumber(allRows.length)
 #. 0: formatCount(col.migrated)
-#: src/lib/components/settings/DataSourceRow.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "{0} records"
@@ -7881,6 +7891,7 @@ msgstr "Schedule"
 msgid "Start"
 msgstr "Start"
 
+#: ../cms/src/editor/ContentSidebar.svelte
 #: src/lib/components/treatments/ColumnFilterPopover.svelte
 msgid "Search..."
 msgstr "Search..."
@@ -7899,8 +7910,10 @@ msgstr "{0} of {1} row(s) selected"
 msgid "Rows per page"
 msgstr "Rows per page"
 
+#. 0: clampedPage + 1; 1: pageCount
 #. 0: table.getState().pagination.pageIndex + 1; 1: table.getPageCount()
 #. 0: page; 1: history.totalPages
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/treatments/DataTablePagination.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Page {0} of {1}"
@@ -24919,18 +24932,15 @@ msgstr "Pump modes can't be checked with a “State active” condition. Use a �
 msgid "Part of this rule's conditions has a setting its kind of condition doesn't have, so it can't be saved."
 msgstr "Part of this rule's conditions has a setting its kind of condition doesn't have, so it can't be saved."
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Records in the last 30 days"
-msgstr "Records in the last 30 days"
+#~ msgid "Records in the last 30 days"
+#~ msgstr "Records in the last 30 days"
 
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "All glucose records"
 msgstr "All glucose records"
 
-#. 0: formatNumber(selectedDataSource.totalEntries)
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "This source sent {0} records in the last 30 days."
-msgstr "This source sent {0} records in the last 30 days."
+#~ msgid "This source sent {0} records in the last 30 days."
+#~ msgstr "This source sent {0} records in the last 30 days."
 
 #. 0: inviterName; 1: url
 #: src/lib/components/members/CopyInvitationMessageButton.svelte
@@ -25003,10 +25013,8 @@ msgstr "Nocturne is a website for viewing diabetes information, such as glucose 
 msgid "<0/> <1/> on Nocturne."
 msgstr "<0/> <1/> on Nocturne."
 
-#. 0: formatNumber(totalEntries)
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "{0} records in the last 30 days"
-msgstr "{0} records in the last 30 days"
+#~ msgid "{0} records in the last 30 days"
+#~ msgstr "{0} records in the last 30 days"
 
 #: src/routes/(unauthenticated)/join/+page.svelte
 msgid "You're signed in as <0/>"
@@ -26752,3 +26760,159 @@ msgstr "Year chart"
 #: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
 msgid "Update data"
 msgstr "Update data"
+
+#. 0: selectedComponent.name
+#: ../cms/src/editor/ComponentPropsEditor.svelte
+msgid "{0} Props"
+msgstr "{0} Props"
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Editing"
+msgstr "Editing"
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "No content selected"
+msgstr "No content selected"
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Save Draft"
+msgstr "Save Draft"
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Publish"
+msgstr "Publish"
+
+#: ../cms/src/editor/MetadataPanel.svelte
+msgid "Metadata <0/>"
+msgstr "Metadata <0/>"
+
+#: ../cms/src/editor/ContentSidebar.svelte
+msgid "Content"
+msgstr "Content"
+
+#: ../cms/src/editor/ContentSidebar.svelte
+msgid "No content found."
+msgstr "No content found."
+
+#: ../cms/src/editor/PreviewPane.svelte
+msgid "Email preview will use better-svelte-email renderer."
+msgstr "Email preview will use better-svelte-email renderer."
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "All messages"
+msgstr "All messages"
+
+#: ../cms/src/translations/TranslationEditor.svelte
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Untranslated"
+msgstr "Untranslated"
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "With drafts"
+msgstr "With drafts"
+
+#. 0: translatedCount; 1: messages.length
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "{0} of {1} messages translated or drafted"
+msgstr "{0} of {1} messages translated or drafted"
+
+#. 0: drafts.size; 1: drafts.size === 1 ? '' \\: 's'
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "{0} draft{1}"
+msgstr "{0} draft{1}"
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "Search source text or translations"
+msgstr "Search source text or translations"
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "No messages match."
+msgstr "No messages match."
+
+#. 0: message.msgidPlural
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Plural: {0}"
+msgstr "Plural: {0}"
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Discard draft"
+msgstr "Discard draft"
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Draft"
+msgstr "Draft"
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Fuzzy"
+msgstr "Fuzzy"
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Translated"
+msgstr "Translated"
+
+#. 0: n
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Form {0}"
+msgstr "Form {0}"
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "No translation yet"
+msgstr "No translation yet"
+
+#: src/lib/components/alerts/DndPanel.svelte
+#: src/routes/(authenticated)/alerts/dnd/+page.svelte
+msgid "Scheduled, on now"
+msgstr "Scheduled, on now"
+
+#: src/lib/components/alerts/SidebarDndToggle.svelte
+msgid "Scheduled Do Not Disturb window is on now"
+msgstr "Scheduled Do Not Disturb window is on now"
+
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records in total"
+msgstr "Records in total"
+
+#. 0: selectedConnector.totalEntriesWindowDays
+#. 0: selectedDataSource.totalEntriesWindowDays
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records in the last {0} days"
+msgstr "Records in the last {0} days"
+
+#. 0: formatNumber(selectedDataSource.totalEntries)
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "This source sent {0} records in total."
+msgstr "This source sent {0} records in total."
+
+#. 0: formatNumber(selectedDataSource.totalEntries); 1: selectedDataSource.totalEntriesWindowDays
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "This source sent {0} records in the last {1} days."
+msgstr "This source sent {0} records in the last {1} days."
+
+#. 0: formatNumber(totalEntries)
+#: src/lib/components/settings/DataSourceRow.svelte
+msgid "{0} records in total"
+msgstr "{0} records in total"
+
+#. 0: formatNumber(totalEntries); 1: totalEntriesWindowDays
+#: src/lib/components/settings/DataSourceRow.svelte
+msgid "{0} records in the last {1} days"
+msgstr "{0} records in the last {1} days"
+
+#: ../cms/src/lib/components/edra/shadcn/editor.svelte
+msgid "Unable to load the content"
+msgstr "Unable to load the content"
+
+#: ../cms/src/lib/components/edra/shadcn/editor.svelte
+msgid "The content of this page might be corrupted."
+msgstr "The content of this page might be corrupted."
+
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
+msgid "Tab"
+msgstr "Tab"
+
+#. 0: text; 1: value; 2: border; 3: value
+#: ../cms/src/lib/components/edra/shadcn/components/toolbar/QuickColors.svelte
+msgid "{0} background-color: {1}50; border: {2} {3};"
+msgstr "{0} background-color: {1}50; border: {2} {3};"

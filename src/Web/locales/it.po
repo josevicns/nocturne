@@ -677,11 +677,13 @@ msgstr ""
 msgid "Glucose"
 msgstr ""
 
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/actogram/Actogram.svelte
 #: src/lib/components/actogram/Actogram.svelte
 msgid "ArrowDown"
 msgstr ""
 
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/actogram/Actogram.svelte
 msgid "ArrowUp"
 msgstr ""
@@ -877,6 +879,7 @@ msgstr ""
 msgid "Custom Permission"
 msgstr ""
 
+#: ../cms/src/editor/ComponentPropsEditor.svelte
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
 #: src/lib/components/patient/PatientInsulinManager.svelte
@@ -1184,11 +1187,13 @@ msgstr ""
 msgid "Page {0} of {1} ({2} total)"
 msgstr ""
 
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Previous"
 msgstr ""
 
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Next"
@@ -1406,6 +1411,8 @@ msgstr ""
 #~ msgid "{0}m <0/>"
 #~ msgstr ""
 
+#: ../cms/src/editor/ComponentPropsEditor.svelte
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
 #: src/lib/components/dashboard/RecentTreatmentsCard.svelte
 #: src/lib/components/reports/sleep/SleepCompositionChart.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
@@ -2019,6 +2026,7 @@ msgstr ""
 msgid "Redo (Ctrl+Shift+Z)"
 msgstr ""
 
+#: ../cms/src/editor/PreviewPane.svelte
 #: src/lib/components/clock-builder/ClockBuilderHeader.svelte
 #: src/lib/components/settings/CustomSoundUpload.svelte
 msgid "Preview"
@@ -2217,6 +2225,7 @@ msgstr ""
 msgid "Weight"
 msgstr ""
 
+#: ../cms/src/lib/components/edra/shadcn/components/toolbar/FontSize.svelte
 #: src/lib/components/clock-builder/TextStyleControls.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
 #: src/routes/(authenticated)/food/GiLabel.svelte
@@ -2519,9 +2528,8 @@ msgstr ""
 msgid "Connector Not Running"
 msgstr ""
 
-#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
-msgid "Total records"
-msgstr ""
+#~ msgid "Total records"
+#~ msgstr ""
 
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
@@ -3584,6 +3592,7 @@ msgstr ""
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
+#: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -3640,6 +3649,7 @@ msgstr ""
 msgid "Add Food"
 msgstr ""
 
+#: ../cms/src/editor/ContentEditor.svelte
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 #: src/lib/components/food/AddFoodDialog.svelte
 #: src/lib/components/meal-matching/MealMatchReviewDialog.svelte
@@ -4915,6 +4925,7 @@ msgstr ""
 msgid "No guest links yet. Create one to share temporary read-only access."
 msgstr ""
 
+#: ../cms/src/editor/ContentSidebar.svelte
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
@@ -6205,6 +6216,7 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/dialogs/DeliveryInspectionDialog.svelte
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
+#: src/routes/(authenticated)/alerts/dnd/+page.svelte
 msgid "Scheduled"
 msgstr ""
 
@@ -6858,10 +6870,8 @@ msgstr ""
 msgid "<0/> Inactive"
 msgstr ""
 
-#. 0: formatNumber(totalEntries)
 #. 0: formatNumber(allRows.length)
 #. 0: formatCount(col.migrated)
-#: src/lib/components/settings/DataSourceRow.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
 msgid "{0} records"
@@ -7881,6 +7891,7 @@ msgstr ""
 msgid "Start"
 msgstr ""
 
+#: ../cms/src/editor/ContentSidebar.svelte
 #: src/lib/components/treatments/ColumnFilterPopover.svelte
 msgid "Search..."
 msgstr ""
@@ -7899,8 +7910,10 @@ msgstr ""
 msgid "Rows per page"
 msgstr ""
 
+#. 0: clampedPage + 1; 1: pageCount
 #. 0: table.getState().pagination.pageIndex + 1; 1: table.getPageCount()
 #. 0: page; 1: history.totalPages
+#: ../cms/src/translations/TranslationEditor.svelte
 #: src/lib/components/treatments/DataTablePagination.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Page {0} of {1}"
@@ -24919,18 +24932,15 @@ msgstr ""
 msgid "Part of this rule's conditions has a setting its kind of condition doesn't have, so it can't be saved."
 msgstr ""
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "Records in the last 30 days"
-msgstr ""
+#~ msgid "Records in the last 30 days"
+#~ msgstr ""
 
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "All glucose records"
 msgstr ""
 
-#. 0: formatNumber(selectedDataSource.totalEntries)
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "This source sent {0} records in the last 30 days."
-msgstr ""
+#~ msgid "This source sent {0} records in the last 30 days."
+#~ msgstr ""
 
 #. 0: inviterName; 1: url
 #: src/lib/components/members/CopyInvitationMessageButton.svelte
@@ -25003,10 +25013,8 @@ msgstr ""
 msgid "<0/> <1/> on Nocturne."
 msgstr ""
 
-#. 0: formatNumber(totalEntries)
-#: src/lib/components/settings/DataSourceRow.svelte
-msgid "{0} records in the last 30 days"
-msgstr ""
+#~ msgid "{0} records in the last 30 days"
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/join/+page.svelte
 msgid "You're signed in as <0/>"
@@ -26751,4 +26759,160 @@ msgstr ""
 
 #: src/lib/components/reports/year-overview/VisibleChart.test-harness.svelte
 msgid "Update data"
+msgstr ""
+
+#. 0: selectedComponent.name
+#: ../cms/src/editor/ComponentPropsEditor.svelte
+msgid "{0} Props"
+msgstr ""
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Editing"
+msgstr ""
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "No content selected"
+msgstr ""
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Save Draft"
+msgstr ""
+
+#: ../cms/src/editor/ContentEditor.svelte
+msgid "Publish"
+msgstr ""
+
+#: ../cms/src/editor/MetadataPanel.svelte
+msgid "Metadata <0/>"
+msgstr ""
+
+#: ../cms/src/editor/ContentSidebar.svelte
+msgid "Content"
+msgstr ""
+
+#: ../cms/src/editor/ContentSidebar.svelte
+msgid "No content found."
+msgstr ""
+
+#: ../cms/src/editor/PreviewPane.svelte
+msgid "Email preview will use better-svelte-email renderer."
+msgstr ""
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "All messages"
+msgstr ""
+
+#: ../cms/src/translations/TranslationEditor.svelte
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Untranslated"
+msgstr ""
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "With drafts"
+msgstr ""
+
+#. 0: translatedCount; 1: messages.length
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "{0} of {1} messages translated or drafted"
+msgstr ""
+
+#. 0: drafts.size; 1: drafts.size === 1 ? '' \\: 's'
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "{0} draft{1}"
+msgstr ""
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "Search source text or translations"
+msgstr ""
+
+#: ../cms/src/translations/TranslationEditor.svelte
+msgid "No messages match."
+msgstr ""
+
+#. 0: message.msgidPlural
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Plural: {0}"
+msgstr ""
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Discard draft"
+msgstr ""
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Draft"
+msgstr ""
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Fuzzy"
+msgstr ""
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Translated"
+msgstr ""
+
+#. 0: n
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "Form {0}"
+msgstr ""
+
+#: ../cms/src/translations/TranslationRow.svelte
+msgid "No translation yet"
+msgstr ""
+
+#: src/lib/components/alerts/DndPanel.svelte
+#: src/routes/(authenticated)/alerts/dnd/+page.svelte
+msgid "Scheduled, on now"
+msgstr ""
+
+#: src/lib/components/alerts/SidebarDndToggle.svelte
+msgid "Scheduled Do Not Disturb window is on now"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records in total"
+msgstr ""
+
+#. 0: selectedConnector.totalEntriesWindowDays
+#. 0: selectedDataSource.totalEntriesWindowDays
+#: src/lib/components/connectors/ConnectorDetailsDialog.svelte
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records in the last {0} days"
+msgstr ""
+
+#. 0: formatNumber(selectedDataSource.totalEntries)
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "This source sent {0} records in total."
+msgstr ""
+
+#. 0: formatNumber(selectedDataSource.totalEntries); 1: selectedDataSource.totalEntriesWindowDays
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "This source sent {0} records in the last {1} days."
+msgstr ""
+
+#. 0: formatNumber(totalEntries)
+#: src/lib/components/settings/DataSourceRow.svelte
+msgid "{0} records in total"
+msgstr ""
+
+#. 0: formatNumber(totalEntries); 1: totalEntriesWindowDays
+#: src/lib/components/settings/DataSourceRow.svelte
+msgid "{0} records in the last {1} days"
+msgstr ""
+
+#: ../cms/src/lib/components/edra/shadcn/editor.svelte
+msgid "Unable to load the content"
+msgstr ""
+
+#: ../cms/src/lib/components/edra/shadcn/editor.svelte
+msgid "The content of this page might be corrupted."
+msgstr ""
+
+#: ../cms/src/lib/components/edra/shadcn/components/SlashCommandList.svelte
+msgid "Tab"
+msgstr ""
+
+#. 0: text; 1: value; 2: border; 3: value
+#: ../cms/src/lib/components/edra/shadcn/components/toolbar/QuickColors.svelte
+msgid "{0} background-color: {1}50; border: {2} {3};"
 msgstr ""
