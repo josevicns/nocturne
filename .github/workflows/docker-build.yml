@@ -12,6 +12,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+          run_install: false
+
+      - name: Generate API Client & Zod Schemas
+        run: |
+          dotnet build src/API/Nocturne.API/Nocturne.API.csproj || true
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
