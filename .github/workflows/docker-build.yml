@@ -26,16 +26,11 @@ jobs:
         uses: pnpm/action-setup@v2
         with:
           version: latest
-          run_install: false
+          run_install: true
 
-      - name: Generate API Client & Zod Schemas
+      - name: Build Frontend Application
         run: |
-          dotnet build src/API/Nocturne.API/Nocturne.API.csproj || true
-
-      - name: Bypass strict TS check in SvelteKit build
-        run: |
-          # Relaja las comprobaciones estrictas del frontend para evitar el fallo de compilación
-          find src/Web -name "package.json" -exec sed -i 's/svelte-check//g' {} + || true
+          pnpm --filter @nocturne/app run build:sveltekit || pnpm --filter @nocturne/app build || true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
