@@ -2,6 +2,7 @@
   import IOBPill from "./IOBPill.svelte";
   import COBPill from "./COBPill.svelte";
   import BasalPill from "./BasalPill.svelte";
+  import ReservoirPill from "./ReservoirPill.svelte";
   import LoopPill from "./LoopPill.svelte";
   import type {
     IOBPillData,
@@ -19,6 +20,8 @@
     cob?: COBPillData | null;
     /** Basal data */
     basal?: BasalPillData | null;
+    /** Reservoir data */
+    reservoir?: number | null;
     /** Loop data */
     loop?: LoopPillData | null;
     /** Configuration for pills */
@@ -33,21 +36,23 @@
     iob = null,
     cob = null,
     basal = null,
+    reservoir = null,
     loop = null,
     config = {},
     units = "mmol/L",
     class: className,
   }: StatusPillBarProps = $props();
 
-  // Merge with defaults (CAGE/SAGE now handled by TrackerPillBar)
+  // Merge with defaults
   const mergedConfig = $derived({
-    enabledPills: config.enabledPills ?? ["iob", "cob", "basal", "loop"],
+    enabledPills: config.enabledPills ?? ["iob", "cob", "basal", "reservoir", "loop"],
   });
 
   // Check which pills should be shown
   const showIob = $derived(mergedConfig.enabledPills.includes("iob"));
   const showCob = $derived(mergedConfig.enabledPills.includes("cob"));
   const showBasal = $derived(mergedConfig.enabledPills.includes("basal"));
+  const showReservoir = $derived(mergedConfig.enabledPills.includes("reservoir"));
   const showLoop = $derived(mergedConfig.enabledPills.includes("loop"));
 
   // Compute whether we have any data to show
@@ -55,6 +60,7 @@
     (showIob && iob) ||
       (showCob && cob) ||
       (showBasal && basal) ||
+      (showReservoir && reservoir != null) ||
       (showLoop && loop)
   );
 </script>
@@ -75,6 +81,10 @@
 
     {#if showBasal && basal}
       <BasalPill data={basal} />
+    {/if}
+
+    {#if showReservoir && reservoir != null}
+      <ReservoirPill {reservoir} />
     {/if}
   </div>
 {/if}
