@@ -1,0 +1,351 @@
+import { untrack } from 'svelte';
+import { resolveDataProp, resolveGeoDataPair } from '../../utils/dataProp.js';
+import { chartDataArray } from '../../utils/common.js';
+import { createMotion, createDataMotionMap } from '../../utils/motion.svelte.js';
+import { get } from '@layerstack/utils';
+import { format as formatValue } from '@layerstack/utils';
+import { getStringWidth, truncateText } from '../../utils/string.js';
+import { getChartContext } from '../../contexts/chart.js';
+import { getGeoContext } from '../../contexts/geo.js';
+/**
+ * Check if a string looks like a CSS/SVG value (percentage, em, px, etc.)
+ * rather than a data property accessor.
+ */
+function isCSSValue(value) {
+    return /^-?[\d.]+(%|em|rem|px|pt|cm|mm|in)?$/.test(value);
+}
+/**
+ * Check if a Text prop value is a data-space prop.
+ * Functions are always data props.
+ * Strings are data props unless they look like CSS values (e.g. "50%", "1em").
+ */
+export function isTextDataProp(value) {
+    if (typeof value === 'function')
+        return true;
+    if (typeof value === 'string' && !isCSSValue(value))
+        return true;
+    return false;
+}
+const defaultKey = (_, i) => i;
+export function getPathLength(pathRef) {
+    if (pathRef && typeof pathRef.getTotalLength === 'function') {
+        try {
+            return pathRef.getTotalLength();
+        }
+        catch (e) {
+            console.error('Error getting path length:', e);
+            return 0;
+        }
+    }
+    return 0;
+}
+/**
+ * Convert css value to pixel value (ex. 0.71em => 11.36)
+ */
+export function getPixelValue(cssValue) {
+    // TODO: Properly measure pixel values using DOM (handle inherited font size, zoom, etc)
+    if (typeof cssValue === 'number')
+        return cssValue;
+    const result = cssValue.match(/([\d.]+)(\D+)/);
+    const number = Number(result?.[1]);
+    switch (result?.[2]) {
+        case 'px':
+            return number;
+        case 'em':
+        case 'rem':
+            return number * 16;
+        default:
+            return 0;
+    }
+}
+/**
+ * Resolve the cap-height used by vertical-anchor math.
+ *
+ * Priority:
+ *   1. Explicit `capHeight` prop
+ *   2. `fontSize * 0.71` when `fontSize` is set (keeps centering correct as
+ *      labels scale per-item)
+ *   3. `'0.71em'` (legacy default — only correct for ~16px text since
+ *      `getPixelValue` resolves `em` against 16, not the actual font-size)
+ */
+export function resolveCapHeight(capHeight, fontSize) {
+    if (capHeight != null)
+        return capHeight;
+    if (fontSize != null)
+        return getPixelValue(fontSize) * 0.71;
+    return '0.71em';
+}
+export function isValidXOrY(xOrY) {
+    return (typeof xOrY === 'number' && Number.isFinite(xOrY)) || typeof xOrY === 'string';
+}
+/** Build the standard `markInfo` payload used by every Text variant. */
+export function textMarkInfo(props, dataMode) {
+    if (!dataMode)
+        return {};
+    return {
+        data: props.data,
+        x: typeof props.x === 'string' ? props.x : undefined,
+        y: typeof props.y === 'string' ? props.y : undefined,
+        color: typeof props.fill === 'string' ? props.fill : undefined,
+    };
+}
+/**
+ * Reactive state shared by every per-layer Text variant. Instantiate from
+ * each `Text.svg.svelte` / `Text.canvas.svelte` / `Text.html.svelte`
+ * component setup, passing a getter for the props.
+ *
+ * Per-layer specific bits (SVG `bind:this` refs, canvas's `render` function,
+ * canvas-specific style measurement) stay in their respective `.svelte` files.
+ */
+export class TextState {
+    #getProps = () => ({});
+    /**
+     * Memoized props — `#getProps()` allocates a fresh object (it spreads `rest`),
+     * so calling it per derived meant ~30 allocations per instance per update.
+     */
+    #props = $derived(this.#getProps());
+    // Contexts
+    chartCtx = getChartContext();
+    geo = getGeoContext();
+    // Path measurement (only meaningful for SVG layer where the textPath element exists)
+    pathRef = $state();
+    // Data mode detection
+    dataMode = $derived(this.#props.data != null || isTextDataProp(this.#props.x) || isTextDataProp(this.#props.y));
+    // Data resolution
+    #resolvedData = $derived(this.dataMode ? (this.#props.data ?? chartDataArray(this.chartCtx.data)) : []);
+    resolvedItems = $derived.by(() => {
+        if (!this.dataMode)
+            return [];
+        const props = this.#props;
+        const keyFn = props.key ?? defaultKey;
+        return this.#resolvedData.map((d, i) => {
+            const key = keyFn(d, i);
+            const resolved = this.resolveTextPosition(d);
+            const animated = this.#dataMotionMap?.get(key);
+            return {
+                d,
+                key,
+                x: animated?.x ?? resolved.x,
+                y: animated?.y ?? resolved.y,
+            };
+        });
+    });
+    resolveTextPosition(d) {
+        const props = this.#props;
+        if (this.geo.projection) {
+            const [projX, projY] = resolveGeoDataPair(props.x, props.y, d, this.geo.projection);
+            return { x: projX, y: projY };
+        }
+        // When x/y are omitted, fall back to the chart's accessors (xGet/yGet) —
+        // mirroring the Circle / Points / Dodge pattern.
+        const xDefault = typeof props.x === 'number'
+            ? props.x
+            : props.x == null && this.chartCtx.config.x != null
+                ? Number(this.chartCtx.xGet(d)) || 0
+                : 0;
+        const yDefault = typeof props.y === 'number'
+            ? props.y
+            : props.y == null && this.chartCtx.config.y != null
+                ? Number(this.chartCtx.yGet(d)) || 0
+                : 0;
+        return {
+            x: resolveDataProp(props.x, d, this.chartCtx.xScale, xDefault),
+            y: resolveDataProp(props.y, d, this.chartCtx.yScale, yDefault),
+        };
+    }
+    resolveTextValue(d) {
+        const value = this.#props.value;
+        if (typeof value === 'function') {
+            const v = value(d);
+            return v != null ? String(v) : '';
+        }
+        if (typeof value === 'string') {
+            const v = get(d, value);
+            return v != null ? String(v) : '';
+        }
+        return value != null ? String(value) : '';
+    }
+    #dataMotionMap = null;
+    // Pixel-mode motion sources
+    #motionX;
+    #motionY;
+    #motionValue;
+    get motionX() {
+        return this.#motionX.current;
+    }
+    get motionY() {
+        return this.#motionY.current;
+    }
+    // Resolved width: for path text, defer to the (SVG-bound) pathRef length
+    resolvedWidth = $derived(this.#props.path ? getPathLength(this.pathRef) : this.#props.width);
+    #defaultTruncateOptions = $derived({
+        maxChars: undefined,
+        position: 'end',
+        maxWidth: this.resolvedWidth,
+    });
+    truncateConfig = $derived.by(() => {
+        const truncate = this.#props.truncate;
+        if (typeof truncate === 'boolean') {
+            if (truncate)
+                return this.#defaultTruncateOptions;
+            return false;
+        }
+        return { ...this.#defaultTruncateOptions, ...(truncate ?? {}) };
+    });
+    // Numeric value tweening
+    rawText = $derived.by(() => {
+        const value = this.#props.value;
+        const motion = this.#props.motion;
+        const format = this.#props.format;
+        if (typeof value === 'function' || value == null)
+            return '';
+        if (typeof value === 'number' && motion) {
+            const v = this.#motionValue.current;
+            // @ts-expect-error - improve format types
+            return format ? formatValue(v, format) : String(v);
+        }
+        // @ts-expect-error - improve format types
+        const text = format ? formatValue(value, format) : value.toString();
+        return text.replace(/\\n/g, '\n');
+    });
+    textValue = $derived.by(() => {
+        const cfg = this.truncateConfig;
+        if (!cfg || cfg === true)
+            return this.rawText;
+        return truncateText(this.rawText, cfg);
+    });
+    // Word-wrapping (depends on style measurement; SVG/canvas-only)
+    // Note: `style` is a placeholder — never assigned in the original component
+    // either, so spaceWidth always falls back to 0. Preserved for behavior parity.
+    #spaceWidth = $derived(getStringWidth(' ', undefined) || 0);
+    wordsByLines = $derived.by(() => {
+        const props = this.#props;
+        const width = props.width;
+        const scaleToFit = props.scaleToFit ?? false;
+        const lines = this.textValue.split('\n');
+        return lines.flatMap((line) => {
+            const words = line.split(/(?:(?! +)\s+)/);
+            if (width == null) {
+                return [{ words }];
+            }
+            return words.reduce((result, item) => {
+                const currentLine = result[result.length - 1];
+                const itemWidth = getStringWidth(item, undefined) || 0;
+                if (currentLine &&
+                    (width == null ||
+                        scaleToFit ||
+                        (currentLine.width || 0) + itemWidth + this.#spaceWidth < width)) {
+                    currentLine.words.push(item);
+                    currentLine.width = currentLine.width || 0;
+                    currentLine.width += itemWidth + this.#spaceWidth;
+                }
+                else {
+                    const newLine = { words: [item], width: itemWidth };
+                    result.push(newLine);
+                }
+                return result;
+            }, []);
+        });
+    });
+    lineCount = $derived(this.wordsByLines.length);
+    // Vertical positioning
+    startDy = $derived.by(() => {
+        const props = this.#props;
+        const verticalAnchor = props.verticalAnchor ?? 'end';
+        const lineHeight = props.lineHeight ?? '1em';
+        const capHeight = resolveCapHeight(props.capHeight, props.fontSize);
+        if (verticalAnchor === 'start') {
+            // Align the cap-height top of the first line to `y`.
+            return getPixelValue(capHeight);
+        }
+        else if (verticalAnchor === 'middle') {
+            return ((this.lineCount - 1) / 2) * -getPixelValue(lineHeight) + getPixelValue(capHeight) / 2;
+        }
+        // `end`: align the baseline (cap-height bottom) of the last line to `y`.
+        return (this.lineCount - 1) * -getPixelValue(lineHeight);
+    });
+    dataModeStartDy = $derived.by(() => {
+        const props = this.#props;
+        const verticalAnchor = props.verticalAnchor ?? 'end';
+        const capHeight = resolveCapHeight(props.capHeight, props.fontSize);
+        // Match `startDy`, but single-line (data mode renders one tspan per item):
+        // `start` → cap-height top at `y`, `middle` → cap-height center, `end` → baseline.
+        if (verticalAnchor === 'start')
+            return getPixelValue(capHeight);
+        if (verticalAnchor === 'middle')
+            return getPixelValue(capHeight) / 2;
+        return 0;
+    });
+    scaleTransform = $derived.by(() => {
+        const props = this.#props;
+        const x = props.x;
+        const y = props.y;
+        const width = props.width;
+        const scaleToFit = props.scaleToFit ?? false;
+        if (scaleToFit &&
+            this.lineCount > 0 &&
+            typeof x === 'number' &&
+            typeof y === 'number' &&
+            typeof width === 'number') {
+            const lineWidth = this.wordsByLines[0].width || 1;
+            const sx = width / lineWidth;
+            const sy = sx;
+            const originX = x - sx * x;
+            const originY = y - sy * y;
+            return `matrix(${sx}, 0, 0, ${sy}, ${originX}, ${originY})`;
+        }
+        return '';
+    });
+    rotateTransform = $derived.by(() => {
+        const props = this.#props;
+        return props.rotate ? `rotate(${props.rotate}, ${props.x}, ${props.y})` : '';
+    });
+    transform = $derived(this.#props.transform ??
+        `${this.scaleTransform} ${this.rotateTransform}`);
+    // Static (non-data-driven) values
+    staticFill = $derived(typeof this.#props.fill === 'string' ? this.#props.fill : undefined);
+    staticFillOpacity = $derived(typeof this.#props.fillOpacity === 'number' ? this.#props.fillOpacity : undefined);
+    staticStroke = $derived(typeof this.#props.stroke === 'string' ? this.#props.stroke : undefined);
+    staticStrokeWidth = $derived(typeof this.#props.strokeWidth === 'number' ? this.#props.strokeWidth : undefined);
+    staticOpacity = $derived(typeof this.#props.opacity === 'number' ? this.#props.opacity : undefined);
+    staticClassName = $derived(typeof this.#props.class === 'string' ? this.#props.class : undefined);
+    constructor(getProps) {
+        this.#getProps = getProps;
+        const initial = getProps();
+        const _initialX = initial.initialX ?? (typeof initial.x === 'function' ? 0 : (initial.x ?? 0));
+        const _initialY = initial.initialY ?? (typeof initial.y === 'function' ? 0 : (initial.y ?? 0));
+        this.#motionX = createMotion(_initialX, () => {
+            const x = this.#props.x;
+            return typeof x === 'number' || typeof x === 'string' ? x : 0;
+        }, initial.motion);
+        this.#motionY = createMotion(_initialY, () => {
+            const y = this.#props.y;
+            return typeof y === 'number' || typeof y === 'string' ? y : 0;
+        }, initial.motion);
+        // Tween numeric values when motion is configured
+        this.#motionValue = createMotion(typeof initial.value === 'number' ? initial.value : 0, () => (typeof this.#props.value === 'number' ? this.#props.value : 0), typeof initial.value === 'number' && initial.motion
+            ? typeof initial.motion === 'object' && 'type' in initial.motion
+                ? initial.motion
+                : undefined
+            : undefined);
+        this.#dataMotionMap = createDataMotionMap(initial.motion);
+        if (this.#dataMotionMap) {
+            const motionMap = this.#dataMotionMap;
+            $effect(() => {
+                if (!this.dataMode)
+                    return;
+                const props = this.#props;
+                const keyFn = props.key ?? defaultKey;
+                const activeKeys = new Set();
+                for (let i = 0; i < this.#resolvedData.length; i++) {
+                    const d = this.#resolvedData[i];
+                    const key = keyFn(d, i);
+                    activeKeys.add(key);
+                    const resolved = this.resolveTextPosition(d);
+                    untrack(() => motionMap.update(key, resolved));
+                }
+                untrack(() => motionMap.cleanup(activeKeys));
+            });
+        }
+    }
+}

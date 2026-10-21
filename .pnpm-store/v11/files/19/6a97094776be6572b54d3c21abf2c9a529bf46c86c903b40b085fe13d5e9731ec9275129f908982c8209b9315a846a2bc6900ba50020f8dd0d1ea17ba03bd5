@@ -1,0 +1,61 @@
+import type { SVGAttributes } from 'svelte/elements';
+import type { CurveFactory, CurveFactoryLineOnly, Line } from 'd3-shape';
+import { type Accessor } from '../../utils/common.js';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import type { ColorProp, StyleProp } from '../../utils/dataProp.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+import type { GeoState } from '../../states/geo.svelte.js';
+import type { Without } from '../../utils/types.js';
+import type { PathProps } from '../Path/Path.shared.svelte.js';
+export type SplinePropsWithoutHTML = {
+    /** Override data instead of using context */
+    data?: any;
+    /** Override `x` accessor from Chart context */
+    x?: Accessor;
+    /** Override `y` accessor from Chart context */
+    y?: Accessor;
+    /** Series key to use for accessor. Only applicable if `<Chart>` uses `series` and `x`/`y` are not set. */
+    seriesKey?: string;
+    /** Function to determine if a point is defined */
+    defined?: Parameters<Line<any>['defined']>[0];
+    /** Curve of path drawn. Imported via d3-shape. */
+    curve?: CurveFactory | CurveFactoryLineOnly;
+    /** Stroke color or function returning stroke per data point. */
+    stroke?: ColorProp;
+    /** Fill color or function returning fill per data point. */
+    fill?: ColorProp;
+    /** Opacity or function returning opacity per data point. */
+    opacity?: StyleProp<number | undefined>;
+    /** Whether to animate the path using tweened interpolation. */
+    motion?: MotionProp;
+} & Omit<PathProps, 'x' | 'y' | 'motion' | 'stroke' | 'fill' | 'opacity'>;
+export type SplineProps = SplinePropsWithoutHTML & Without<SVGAttributes<SVGPathElement>, SplinePropsWithoutHTML>;
+export type SplineSegment = {
+    stroke?: string;
+    fill?: string;
+    opacity?: number;
+    d: string;
+};
+/**
+ * Reactive state shared by every per-layer Spline variant. Holds the
+ * computed `d` (path data), `segments` (per-style-grouped paths when
+ * stroke/fill/opacity are functions), and tween state.
+ */
+export declare class SplineState {
+    #private;
+    ctx: ChartState;
+    geo: GeoState;
+    constructor(getProps: () => SplineProps);
+    series: import("../index.js").SeriesData<any, any> | undefined;
+    seriesAccessor: string | number | ((d: any) => any) | Accessor<any>[] | undefined;
+    xAccessor: (d: any) => any;
+    yAccessor: (d: any) => any;
+    xOffset: number;
+    yOffset: number;
+    hasAnyStyleFn: boolean;
+    d: string;
+    segments: SplineSegment[] | null;
+    isTweened: boolean;
+    get tweenedPath(): any;
+    seriesOpacity: number;
+}

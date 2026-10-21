@@ -1,0 +1,112 @@
+#!/usr/bin/env node
+import { dirname } from 'node:path';
+import { parseArgs } from 'node:util';
+import { defaultConfigNames, getConfig } from '../config.js';
+import { Hub } from '../hub.js';
+import { color, logLevels } from '../log.js';
+import { check, checkHelp } from './check.js';
+import { status, statusHelp } from './status.js';
+const { positionals, values } = parseArgs({
+    options: {
+        config: {
+            type: 'string',
+        },
+        clean: {
+            type: 'boolean',
+            short: 'c',
+            default: false,
+        },
+        watch: {
+            type: 'boolean',
+            short: 'w',
+            default: false,
+        },
+        json: {
+            type: 'boolean',
+            default: false,
+        },
+        full: {
+            type: 'boolean',
+            default: false,
+        },
+        sync: {
+            type: 'boolean',
+            default: false,
+        },
+        'log-level': {
+            type: 'string',
+            short: 'l',
+            default: 'info',
+        },
+        modify: {
+            type: 'string',
+        },
+        help: {
+            type: 'boolean',
+            short: 'h',
+        },
+    },
+    allowPositionals: true,
+});
+const cmd = positionals[0];
+const help = `
+Usage:
+    ${color.cyan('wuchale [command] {options}')}
+
+Commands:
+    ${color.grey('[none]')}  Extract/compile messages from the codebase into catalogs
+            deleting unused messages if ${color.cyan('--clean')} is specified
+    ${color.cyan('status')}  Show current status
+    ${color.cyan('check')}   Check for errors
+
+Options:
+    ${color.cyan('--config')}         Use another config file instead of ${defaultConfigNames.map(color.cyan).join('|')}
+    ${color.cyan('--clean')}, ${color.cyan('-c')}      Remove unused messages from catalogs
+    ${color.cyan('--watch')}, ${color.cyan('-w')}      Continuously watch for file changes
+    ${color.cyan('--sync')}           Extract sequentially instead of in parallel
+    ${color.cyan('--modify a1,a2')}   Modify files in place for adapters ${color.cyan('a1')}, ${color.cyan('a2')}, etc.
+    ${color.cyan('--log-level')}, ${color.cyan('-l')}  {${Object.keys(logLevels).map(color.cyan)}} (only when no commands) set log level
+    ${color.cyan('--help')}, ${color.cyan('-h')}       Show this help
+
+You can specify ${color.cyan('--help')} after a sub-command for more.
+`;
+async function configRootLocales() {
+    const config = await getConfig(values.config);
+    config.logLevel = values['log-level'];
+    const root = values.config ? dirname(values.config) : process.cwd();
+    return [config, root, config.locales];
+}
+if (cmd === 'status') {
+    if (values.help) {
+        console.log(statusHelp);
+    }
+    else {
+        const [config, root] = await configRootLocales();
+        await status(config, root, values.json);
+    }
+}
+else if (cmd === 'check') {
+    if (values.help) {
+        console.log(checkHelp);
+    }
+    else {
+        const [config, root] = await configRootLocales();
+        await check(config, root, values.full);
+    }
+}
+else if (values.help) {
+    console.log('wuchale cli');
+    console.log(help.trimEnd());
+}
+else if (cmd == null) {
+    const [config, root] = await configRootLocales();
+    const hub = await Hub.create('cli', () => config, root, values.modify
+        ?.split(',')
+        ?.map(a => a.trim())
+        ?.filter(a => a) ?? []);
+    await hub.directVisit(values.clean, values.watch, values.sync);
+}
+else {
+    console.warn(`${color.yellow('Unknown command')}: ${cmd}`);
+    console.log(help);
+}

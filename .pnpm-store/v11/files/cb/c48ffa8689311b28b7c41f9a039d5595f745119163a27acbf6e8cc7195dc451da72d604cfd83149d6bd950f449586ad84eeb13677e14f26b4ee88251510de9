@@ -1,0 +1,48 @@
+import type MagicString from 'magic-string';
+import { type HeuristicDetails, type HeuristicDetailsBase, type HeuristicFunc, type IndexTracker, type Message } from '../adapters.js';
+import { type CommentDirectives, type RuntimeVars } from './index.js';
+type NestedRanges = [number, number, boolean][];
+type Range = {
+    start: number;
+    end: number;
+};
+type InitProps<MixNodeT, TxtT extends MixNodeT, ComT extends MixNodeT, ExprT extends MixNodeT> = {
+    mstr: MagicString;
+    index: IndexTracker;
+    content: string;
+    vars: () => RuntimeVars;
+    getRange: (node: MixNodeT) => Range;
+    isText: (node: MixNodeT) => node is TxtT;
+    isExpression: (node: MixNodeT) => node is ExprT;
+    isComment: (node: MixNodeT) => node is ComT;
+    leaveInPlace: (node: MixNodeT) => boolean;
+    getTextContent: (node: TxtT) => string;
+    getCommentData: (node: ComT) => string;
+    visitFunc: (node: MixNodeT) => Message[];
+    fullHeuristicDetails: (details: HeuristicDetailsBase) => HeuristicDetails;
+    checkHeuristic: HeuristicFunc;
+    wrapNested: (inNested: boolean, msgInfo: Message, hasExpr: boolean, nestedRanges: NestedRanges, lastChildEnd: number) => void;
+};
+export type MixedScope = 'markup' | 'attribute';
+export type ModFunc = (nested: boolean, lvlHasMsg: boolean) => void;
+type VisitProps<NodeT> = {
+    children: NodeT[];
+    nestable: boolean;
+    commentDirectives: CommentDirectives;
+    scope: MixedScope;
+    element: string;
+    attribute?: string;
+    /** force using component instead of a function call.
+     * set to true when variables can be objects that cannot be converted to strings like
+     * e.g. components in jsx to prevent `[object Object]` being rendered. */
+    useComponent?: boolean;
+    /** additional modify func to call */
+    addMod?: ModFunc | undefined;
+};
+export declare class MixedVisitor<MixNodeT extends object, TxtT extends MixNodeT, ComT extends MixNodeT, ExprT extends MixNodeT> {
+    #private;
+    constructor(props: InitProps<MixNodeT, TxtT, ComT, ExprT>);
+    applyMod(scope?: MixedScope): Message[];
+    visit(props: VisitProps<MixNodeT>): Message[];
+}
+export {};

@@ -1,0 +1,239 @@
+import { Message, parseMarkdown } from "chat";
+import { Resend } from "resend";
+import { ResendFormatConverter } from "./format-converter.js";
+import { parseInboundEmail } from "./message-parser.js";
+import { renderMessage } from "./message-renderer.js";
+import { ThreadResolver } from "./thread-resolver.js";
+import { generateMessageId, hashMessageId, parseEmailAddress, } from "./utils.js";
+import { WebhookHandler } from "./webhook-handler.js";
+class NotImplementedError extends Error {
+    constructor(method) {
+        super(`${method} is not supported by the Resend adapter`);
+        this.name = "NotImplementedError";
+    }
+}
+export class ResendAdapter {
+    name = "resend";
+    userName;
+    config;
+    resend = null;
+    chat = null;
+    threadResolver = new ThreadResolver();
+    formatConverter = new ResendFormatConverter();
+    webhookHandler = null;
+    constructor(config) {
+        this.config = config;
+        this.userName = config.fromAddress;
+    }
+    /** Lazily create the Resend client so both initialize() and direct usage work. */
+    getResend() {
+        if (!this.resend) {
+            const apiKey = this.config.apiKey || process.env.RESEND_API_KEY;
+            if (!apiKey) {
+                throw new Error("Resend API key is required. Provide it via config.apiKey or RESEND_API_KEY env var.");
+            }
+            this.resend = new Resend(apiKey);
+        }
+        return this.resend;
+    }
+    async initialize(chat) {
+        this.getResend();
+        this.chat = chat;
+        const webhookSecret = this.config.webhookSecret || process.env.RESEND_WEBHOOK_SECRET || "";
+        this.webhookHandler = new WebhookHandler(this.getResend(), webhookSecret);
+    }
+    encodeThreadId(id) {
+        return this.threadResolver.encodeThreadId(id);
+    }
+    decodeThreadId(threadId) {
+        return this.threadResolver.decodeThreadId(threadId);
+    }
+    channelIdFromThreadId(threadId) {
+        const { toAddress } = this.decodeThreadId(threadId);
+        return `resend:${toAddress}`;
+    }
+    async handleWebhook(request, options) {
+        if (!(this.webhookHandler && this.chat)) {
+            throw new Error("Adapter not initialized. Call initialize() first.");
+        }
+        const webhookSecret = this.config.webhookSecret || process.env.RESEND_WEBHOOK_SECRET;
+        if (!webhookSecret) {
+            throw new Error("Webhook secret is required for webhook verification (config.webhookSecret or RESEND_WEBHOOK_SECRET env)");
+        }
+        const result = await this.webhookHandler.parseWebhookRequest(request);
+        if (!result.event) {
+            return new Response(null, { status: result.status });
+        }
+        const email = await this.webhookHandler.fetchEmailContent(result.event.data.email_id);
+        // Webhook payload is the authoritative source for attachments —
+        // the fetched email may not include them.
+        if (result.event.data.attachments?.length && !email.attachments?.length) {
+            email.attachments = result.event.data.attachments;
+        }
+        const senderAddress = parseEmailAddress(email.from);
+        // Normalize header keys to handle Resend's varying casing
+        const headers = email.headers || {};
+        const inReplyTo = headers["In-Reply-To"] || headers["in-reply-to"] || undefined;
+        const references = headers.References || headers.references || undefined;
+        const threadId = await this.threadResolver.resolveThreadId({
+            toAddress: senderAddress,
+            messageId: email.message_id,
+            inReplyTo,
+            references,
+        });
+        this.threadResolver.trackSubject(threadId, email.subject);
+        const parsed = parseInboundEmail(email, threadId, this.config.fromAddress);
+        this.chat.processMessage(this, threadId, parsed, options);
+        return new Response(null, { status: 200 });
+    }
+    async postMessage(threadId, message) {
+        const resend = this.getResend();
+        // Normalize AdapterPostableMessage to { text?, formatted?, card? }
+        let normalized;
+        if (typeof message === "string") {
+            normalized = { text: message };
+        }
+        else if ("markdown" in message) {
+            normalized = {
+                formatted: parseMarkdown(message.markdown),
+            };
+        }
+        else if ("raw" in message) {
+            normalized = { text: message.raw };
+        }
+        else if ("ast" in message) {
+            normalized = {
+                formatted: message.ast,
+            };
+        }
+        else if ("card" in message) {
+            normalized = {
+                card: message.card,
+            };
+        }
+        else if ("type" in message) {
+            normalized = { card: message };
+        }
+        else {
+            normalized = message;
+        }
+        const decoded = this.threadResolver.decodeThreadId(threadId);
+        const rendered = await renderMessage(normalized);
+        const fromHeader = this.config.fromName
+            ? `${this.config.fromName} <${this.config.fromAddress}>`
+            : this.config.fromAddress;
+        const messageId = generateMessageId(this.config.fromAddress);
+        const headers = this.threadResolver.getReplyHeaders(threadId);
+        const storedSubject = this.threadResolver.getSubject(threadId);
+        const subject = storedSubject ? `Re: ${storedSubject}` : "New message";
+        const response = await resend.emails.send({
+            from: fromHeader,
+            to: [decoded.toAddress],
+            subject,
+            html: rendered.html,
+            text: rendered.text,
+            ...(headers && { headers }),
+        });
+        if (response.error || !response.data) {
+            throw new Error(`Failed to send email: ${response.error?.message || "Unknown error"}`);
+        }
+        this.threadResolver.trackMessage(threadId, messageId);
+        return {
+            id: response.data.id,
+            raw: {
+                id: response.data.id,
+                messageId,
+                from: this.config.fromAddress,
+                to: [decoded.toAddress],
+                subject,
+                text: rendered.text,
+                html: rendered.html,
+                headers: headers || {},
+                createdAt: new Date().toISOString(),
+            },
+            threadId,
+        };
+    }
+    async stream(threadId, textStream, _options) {
+        let markdown = "";
+        for await (const chunk of textStream) {
+            if (typeof chunk === "string") {
+                markdown += chunk;
+                continue;
+            }
+            if (chunk.type === "markdown_text") {
+                markdown += chunk.text;
+            }
+        }
+        if (!markdown) {
+            throw new Error("Resend adapter received a stream with no textual content (no string or markdown_text chunks). Email requires text; ensure your stream produces at least one text delta, or handle empty completions before calling thread.post().");
+        }
+        return this.postMessage(threadId, { markdown });
+    }
+    editMessage(_threadId, _messageId, _message) {
+        throw new NotImplementedError("editMessage");
+    }
+    deleteMessage(_threadId, _messageId) {
+        throw new NotImplementedError("deleteMessage");
+    }
+    addReaction(_threadId, _messageId, _reaction) {
+        throw new NotImplementedError("addReaction");
+    }
+    removeReaction(_threadId, _messageId, _reaction) {
+        throw new NotImplementedError("removeReaction");
+    }
+    startTyping(_threadId) {
+        throw new NotImplementedError("startTyping");
+    }
+    renderFormatted(content) {
+        return this.formatConverter.fromAst(content);
+    }
+    async openDM(email) {
+        const messageId = generateMessageId(email);
+        const hash = await hashMessageId(messageId);
+        const threadId = this.threadResolver.encodeThreadId({
+            toAddress: email,
+            rootMessageIdHash: hash,
+        });
+        this.threadResolver.trackMessage(threadId, messageId);
+        return threadId;
+    }
+    async fetchThread(threadId) {
+        const decoded = this.threadResolver.decodeThreadId(threadId);
+        return {
+            id: threadId,
+            channelId: this.channelIdFromThreadId(threadId),
+            metadata: {
+                title: `Conversation with ${decoded.toAddress}`,
+                toAddress: decoded.toAddress,
+            },
+        };
+    }
+    async fetchMessages(_threadId) {
+        return { messages: [] };
+    }
+    parseMessage(raw) {
+        const authorEmail = parseEmailAddress(raw.from);
+        const text = raw.text || "";
+        return new Message({
+            id: raw.id,
+            threadId: "", // filled in by Chat SDK
+            text,
+            formatted: parseMarkdown(text),
+            raw,
+            author: {
+                userId: authorEmail,
+                fullName: authorEmail,
+                userName: authorEmail,
+                isBot: false,
+                isMe: authorEmail === this.config.fromAddress,
+            },
+            metadata: {
+                dateSent: new Date(raw.createdAt),
+                edited: false,
+            },
+            attachments: [],
+        });
+    }
+}
+//# sourceMappingURL=adapter.js.map

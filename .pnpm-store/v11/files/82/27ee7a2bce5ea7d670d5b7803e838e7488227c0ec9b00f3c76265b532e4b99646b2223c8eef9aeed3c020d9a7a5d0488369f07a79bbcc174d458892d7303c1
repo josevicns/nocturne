@@ -1,0 +1,11 @@
+/**
+ * Delete generated files this run no longer emits, returning what was removed.
+ *
+ * The shared modules come and go with the spec and the config — dropping the last
+ * form() removes the form utils, overriding every catch arm removes the error
+ * translation — so a stale copy left behind keeps type-checking and shipping
+ * against a contract nothing generates any more. They are matched by exact name:
+ * an output dir also holds `.generated.ts` files written by other tools, and this
+ * one only gets to delete its own.
+ */
+export declare function pruneStaleGeneratedFiles(dir: string, emitted: Iterable<string>): string[];

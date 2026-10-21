@@ -1,0 +1,12 @@
+import type { GeneratorConfig } from '../config.js';
+export declare const REMOTE_ERROR_FILE = "remote-error.generated.ts";
+/**
+ * The exports the configured catch arms actually call.
+ *
+ * The arms are opaque code, so the only way to know whether the shared module is
+ * needed — by the defaults or by a consumer's own arm calling into it — is to
+ * look for calls to it in the code about to be emitted.
+ */
+export declare function remoteErrorExportsUsedBy(config: GeneratorConfig): string[];
+export declare function generateRemoteErrorImport(config: GeneratorConfig): string;
+export declare function generateRemoteErrorFile(config: GeneratorConfig): string;

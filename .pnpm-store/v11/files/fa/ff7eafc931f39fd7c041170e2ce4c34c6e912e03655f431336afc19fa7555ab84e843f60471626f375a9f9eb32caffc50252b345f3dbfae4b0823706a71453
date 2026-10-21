@@ -1,0 +1,6 @@
+/**
+ * Simple reactive signal to notify the LanguageList when translations are updated.
+ * Using Svelte 5 runes for fine-grained reactivity.
+ */
+export declare function getRefreshCount(): number;
+export declare function triggerRefresh(): void;

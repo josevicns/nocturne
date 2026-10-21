@@ -1,0 +1,57 @@
+/** Resolve {@link ErrorHandling.on401} to a string for a given remote kind. */
+export function resolveOn401(handler, kind) {
+    return typeof handler === 'function' ? handler(kind) : handler;
+}
+const DEFAULT_IMPORTS = {
+    server: '$app/server',
+    kit: '@sveltejs/kit',
+    schemas: '$lib/api/generated/schemas',
+    apiTypes: '$api',
+    zod: 'zod',
+};
+const DEFAULT_ERROR_HANDLING = {
+    on401: (kind) => kind === 'query'
+        ? 'const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`)'
+        : "throw error(401, 'Unauthorized')",
+    on403: "throw error(403, remoteErrorMessage(err, 'Forbidden'))",
+    on500: (functionName) => `throw translateRemoteError(err, 'Failed to ${functionName}')`,
+    forwardStatuses: [400, 409, 429],
+    imports: [],
+};
+const DEFAULTS = {
+    openApiPath: './openapi.json',
+    outputDir: './src/lib',
+    remoteFunctionsOutput: 'api/generated',
+    apiClientOutput: 'api/api-client.generated.ts',
+    imports: DEFAULT_IMPORTS,
+    clientAccess: 'getRequestEvent().locals.apiClient',
+    errorHandling: DEFAULT_ERROR_HANDLING,
+    nswagClientPath: './generated/api-client',
+    dateTimeType: 'Date',
+    typedSchemas: false,
+};
+/** Type-helper for config files. Returns the input as-is. */
+export function defineConfig(config) {
+    return config;
+}
+/** Merge user config with defaults to produce a fully resolved config. */
+export function resolveConfig(user) {
+    return {
+        openApiPath: user.openApiPath ?? DEFAULTS.openApiPath,
+        outputDir: user.outputDir ?? DEFAULTS.outputDir,
+        remoteFunctionsOutput: user.remoteFunctionsOutput ?? DEFAULTS.remoteFunctionsOutput,
+        apiClientOutput: user.apiClientOutput ?? DEFAULTS.apiClientOutput,
+        imports: {
+            ...DEFAULTS.imports,
+            ...user.imports,
+        },
+        clientAccess: user.clientAccess ?? DEFAULTS.clientAccess,
+        errorHandling: {
+            ...DEFAULTS.errorHandling,
+            ...user.errorHandling,
+        },
+        nswagClientPath: user.nswagClientPath ?? DEFAULTS.nswagClientPath,
+        dateTimeType: user.dateTimeType ?? DEFAULTS.dateTimeType,
+        typedSchemas: user.typedSchemas ?? DEFAULTS.typedSchemas,
+    };
+}

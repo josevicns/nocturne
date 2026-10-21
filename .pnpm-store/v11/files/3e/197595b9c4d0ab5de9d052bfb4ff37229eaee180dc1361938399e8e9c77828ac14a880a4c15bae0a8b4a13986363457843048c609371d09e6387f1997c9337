@@ -1,0 +1,8 @@
+import type { ChartState } from '../../states/chart.svelte.js';
+type $$ComponentProps = {
+    chartProps?: Record<string, any>;
+    oncontext?: (ctx: ChartState<any, any, any>) => void;
+};
+declare const TransformTestHarness: import("svelte").Component<$$ComponentProps, {}, "">;
+type TransformTestHarness = ReturnType<typeof TransformTestHarness>;
+export default TransformTestHarness;

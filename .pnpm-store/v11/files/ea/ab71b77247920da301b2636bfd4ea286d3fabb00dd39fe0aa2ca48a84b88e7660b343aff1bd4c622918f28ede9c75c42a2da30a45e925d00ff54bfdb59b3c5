@@ -1,0 +1,25 @@
+import type { Translation, Language, LanguageStats } from './types.js';
+/**
+ * Parse a .po file and extract translations
+ */
+export declare function parsePoFile(filePath: string): Translation[];
+/**
+ * Save translations back to a .po file
+ */
+export declare function savePoFile(filePath: string, updates: Translation[]): void;
+/**
+ * Update a single translation
+ */
+export declare function updateTranslation(filePath: string, msgid: string, msgstr: string, context?: string): void;
+/**
+ * Find all .po files in a directory
+ */
+export declare function findPoFiles(localesDir: string): Language[];
+/**
+ * Get language statistics for all languages
+ */
+export declare function getLanguageStats(localesDir: string): LanguageStats[];
+/**
+ * Get a human-readable language name from a locale code
+ */
+export declare function getLanguageName(code: string): string;

@@ -1,0 +1,172 @@
+import type { ComponentProps, Snippet } from 'svelte';
+import type { SVGAttributes } from 'svelte/elements';
+import { type FormatType, type FormatConfig } from '@layerstack/utils';
+import type { Transition, TransitionParams, Without } from '../../utils/types.js';
+import type { GroupProps } from '../Group/Group.shared.svelte.js';
+import type { TextProps } from '../Text/Text.shared.svelte.js';
+import type Rule from '../Rule/Rule.svelte';
+import type { ChartState } from '../../states/chart.svelte.js';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import { type TicksConfig } from '../../utils/ticks.js';
+export type AxisPropsWithoutHTML<In extends Transition = Transition> = {
+    /**
+     * Location of axis
+     */
+    placement: 'top' | 'bottom' | 'left' | 'right' | 'angle' | 'radius';
+    /**
+     * The label for the axis.
+     *
+     * Can either be a string or a snippet to render custom content.
+     * The snippet receives spreadable props to apply to the label.
+     */
+    label?: string | Snippet<[{
+        props: TextProps;
+    }]>;
+    /**
+     * Location of axis label
+     * @default 'middle'
+     */
+    labelPlacement?: 'start' | 'middle' | 'end';
+    /**
+     * Props applied to label Text
+     */
+    labelProps?: Partial<TextProps>;
+    /**
+     * Draw a rule line. Use Rule component for greater rendering order control
+     * @default false
+     */
+    rule?: boolean | Partial<ComponentProps<typeof Rule>>;
+    /**
+     * Draw grid lines. Pass props (class, style, stroke, strokeWidth, opacity,
+     * dashArray) to forward onto the underlying grid line.
+     * @default false
+     */
+    grid?: boolean | (Pick<SVGAttributes<SVGElement>, 'class' | 'style'> & {
+        stroke?: string;
+        strokeWidth?: number;
+        opacity?: number;
+        dashArray?: number | number[] | string;
+    });
+    /**
+     * Control the number of ticks
+     */
+    ticks?: TicksConfig;
+    /**
+     * Width or height of each tick in pixels (enabling responsive count)
+     * @default 80 (top|bottom|angle) or 50 (left|right|radius)
+     */
+    tickSpacing?: number | null;
+    /**
+     * Whether to render tick labels on multiple lines for additional context
+     *
+     * @default false
+     */
+    tickMultiline?: boolean;
+    /**
+     * Length of the tick line
+     * @default 4
+     */
+    tickLength?: number;
+    /**
+     * Whether to render tick marks.
+     *
+     * @default true
+     */
+    tickMarks?: boolean;
+    /**
+     * Format tick labels
+     */
+    format?: FormatType | FormatConfig;
+    /**
+     * Props to apply to each tick label
+     */
+    tickLabelProps?: Partial<TextProps>;
+    /**
+     * A snippet to render your own custom tick label.
+     */
+    tickLabel?: Snippet<[{
+        props: TextProps;
+        index: number;
+    }]>;
+    /**
+     * Transition function for entering elements
+     * @default defaults to fade if the motion prop is set to tweened
+     */
+    transitionIn?: In;
+    /**
+     * Parameters for the transitionIn function
+     * @default { easing: cubicIn }
+     */
+    transitionInParams?: TransitionParams<In>;
+    /**
+     * Override scale for the axis
+     */
+    scale?: any;
+    /**
+     * Stroke color for axis rule, grid lines, and tick marks.
+     * Useful for server-side rendering where CSS variables are not available.
+     */
+    stroke?: string;
+    /**
+     * Fill color for tick labels and axis label.
+     * Useful for server-side rendering where CSS variables are not available.
+     */
+    fill?: string;
+    /**
+     * Classes for styling various parts of the axis
+     * @default {}
+     */
+    classes?: {
+        root?: string;
+        label?: string;
+        rule?: string;
+        tick?: string;
+        tickLabel?: string;
+    };
+    motion?: MotionProp;
+};
+export type AxisProps<In extends Transition = Transition> = AxisPropsWithoutHTML<In> & Without<GroupProps, AxisPropsWithoutHTML<In>>;
+export type AxisTickItem = {
+    key: number;
+    tick: any;
+    tickCoordsX: number;
+    tickCoordsY: number;
+    radialTickCoordsX: number;
+    radialTickCoordsY: number;
+    radialTickMarkCoordsX: number;
+    radialTickMarkCoordsY: number;
+    tickLabelProps: TextProps;
+};
+/**
+ * Reactive state shared by every per-layer Axis variant.
+ */
+export declare class AxisState {
+    #private;
+    ctx: ChartState;
+    constructor(getProps: () => AxisProps);
+    orientation: string;
+    scale: any;
+    interval: import("d3-time").TimeInterval | null;
+    defaultTickSpacing: number | undefined;
+    tickSpacing: number | null | undefined;
+    resolvedFormat: FormatType | FormatConfig | undefined;
+    xRangeMinMax: [number, number];
+    yRangeMinMax: [number, number];
+    ctxSize: number | null;
+    effectiveSize: number | null;
+    tickCount: number | undefined;
+    formatCount: number | undefined;
+    tickVals: any[];
+    tickFormat: (date: Date, i: number) => string;
+    getCoords(tick: any): {
+        x: number;
+        y: number;
+    };
+    getDefaultTickLabelProps(tick: any): Partial<TextProps>;
+    resolvedLabelX: number;
+    resolvedLabelY: string | number;
+    resolvedLabelTextAnchor: string;
+    resolvedLabelVerticalAnchor: string;
+    resolvedLabelProps: TextProps;
+    tickItems: AxisTickItem[];
+}

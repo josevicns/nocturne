@@ -1,0 +1,54 @@
+{
+  "name": "openapi-remote-codegen",
+  "version": "0.8.0",
+  "type": "module",
+  "description": "Generate type-safe SvelteKit remote functions from OpenAPI specs with x-remote-* extensions",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "openapi-remote-codegen": "dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/public.d.ts",
+      "import": "./dist/public.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "openapi",
+    "sveltekit",
+    "remote-functions",
+    "codegen",
+    "typescript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ryceg/openapi-remote-codegen.git",
+    "directory": "packages/codegen"
+  },
+  "homepage": "https://github.com/ryceg/openapi-remote-codegen#readme",
+  "bugs": "https://github.com/ryceg/openapi-remote-codegen/issues",
+  "dependencies": {
+    "openapi-types": "^12.1.3"
+  },
+  "peerDependencies": {
+    "@sveltejs/kit": ">=2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11",
+    "zod": "^4.5.4"
+  }
+}

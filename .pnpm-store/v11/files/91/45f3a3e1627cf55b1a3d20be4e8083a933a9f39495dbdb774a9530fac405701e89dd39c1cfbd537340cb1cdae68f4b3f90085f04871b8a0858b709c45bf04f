@@ -1,0 +1,56 @@
+import { type Matcher } from 'picomatch';
+import type { Adapter, Message, TransformOutputCode } from '../adapters.js';
+import AIQueue from '../ai/index.js';
+import type { ConfigPartial, DevMode } from '../config.js';
+import type { Logger } from '../log.js';
+import { type FileRef, type Item } from '../storage.js';
+import { Files, type FilesOptsCreatePass } from './files.js';
+import { type GranularState, type SharedState, State } from './state.js';
+import { URLHandler } from './url.js';
+export type Mode = 'dev' | 'build' | 'cli';
+type TrackedRefs = Map<string, {
+    ref: FileRef;
+    used: number;
+}>;
+export declare function getLoadIDs(adapter: Adapter, granularStates: Iterable<GranularState>, sourceLocale: string): number[];
+export declare const newItemsAllowed: (mode: Mode, devMode: DevMode) => boolean;
+export declare function getFallbackChains(fallbackConf: Record<string, string>, locales: string[], sourceLocale: string): Map<string, string[]>;
+type HandlerOptsCreate = FilesOptsCreatePass & {
+    config: ConfigPartial;
+    mode: Mode;
+    log: Logger;
+    sourceLocale: string;
+    sharedState: SharedState;
+    devMode: DevMode;
+    modifyInplace: boolean;
+};
+export declare class AdapterHandler {
+    #private;
+    readonly key: string;
+    readonly sourceLocale: string;
+    readonly adapter: Adapter;
+    readonly sharedState: SharedState;
+    readonly granularState: State;
+    readonly fileMatches: Matcher;
+    readonly files: Files;
+    readonly url: URLHandler;
+    readonly aiQueue?: AIQueue;
+    onBeforeSave?: () => void;
+    private constructor();
+    static create: (opts: HandlerOptsCreate) => Promise<AdapterHandler>;
+    loadStorage: () => Promise<void>;
+    saveStorage: () => Promise<void>;
+    compile: (hmrVersion?: number) => Promise<void>;
+    saveStorageCompile: () => Promise<void>;
+    writeCompiled: (loc: string, hmrVersion?: number) => Promise<void>;
+    getCompiledFallback(index: number, locale: string): string | import("../compile.js").CompositePayload[];
+    popTrackedRefs: (filename: string) => TrackedRefs;
+    updateRef: (item: Item, key: string, filename: string, msgInfo: Message, trackedRefrences: TrackedRefs) => boolean;
+    cleanTrackedRefs: (trackedRefs: TrackedRefs) => {
+        cleaned: boolean;
+        cleanedUrls: boolean;
+    };
+    handleMessages: (msgs: Message[], filename: string) => Promise<[string[], boolean]>;
+    transform: (content: string, filename: string, hmrVersion?: number, forServer?: boolean) => Promise<[TransformOutputCode, boolean]>;
+}
+export {};

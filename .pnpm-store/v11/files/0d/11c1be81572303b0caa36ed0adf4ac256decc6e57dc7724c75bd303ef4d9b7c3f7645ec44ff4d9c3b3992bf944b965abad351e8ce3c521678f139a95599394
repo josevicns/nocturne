@@ -1,0 +1,1 @@
+{"version":3,"file":"format-converter.d.ts","sourceRoot":"","sources":["../src/format-converter.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,IAAI,EAAe,MAAM,OAAO,CAAC;AAK/C,qBAAa,qBAAqB;IAChC,OAAO,CAAC,GAAG,EAAE,IAAI,GAAG,MAAM;IAQ1B,KAAK,CAAC,IAAI,EAAE,MAAM,GAAG,IAAI;CAe1B"}

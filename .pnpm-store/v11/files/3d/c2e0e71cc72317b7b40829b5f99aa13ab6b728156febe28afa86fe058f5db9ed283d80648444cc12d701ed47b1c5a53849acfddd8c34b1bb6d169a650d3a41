@@ -1,0 +1,14 @@
+import type { Root } from "mdast";
+import type { CardNode } from "./card-renderer.js";
+interface RenderInput {
+    card?: CardNode;
+    formatted?: Root;
+    text?: string;
+}
+interface RenderOutput {
+    html: string;
+    text: string;
+}
+export declare function renderMessage(input: RenderInput): Promise<RenderOutput>;
+export {};
+//# sourceMappingURL=message-renderer.d.ts.map

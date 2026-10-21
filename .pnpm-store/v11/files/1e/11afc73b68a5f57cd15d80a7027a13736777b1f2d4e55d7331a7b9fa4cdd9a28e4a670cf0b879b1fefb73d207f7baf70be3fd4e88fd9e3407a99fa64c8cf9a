@@ -1,0 +1,402 @@
+import { parse, preprocess } from 'svelte/compiler';
+import { getKey } from 'wuchale';
+import { MixedVisitor, varNames } from 'wuchale/adapter-utils';
+import { parseScript, Transformer } from 'wuchale/adapter-vanilla';
+const noWrapTopCalls = ['$props', '$state', '$derived', '$effect'];
+const rtComponent = 'W_tx_';
+const headerAdd = `\nimport ${rtComponent} from "@wuchale/svelte/runtime.svelte"`;
+const snipPrefix = '_w_snippet_';
+const rtModuleVar = `${varNames.rt}mod_`;
+// for use before actually parsing the code,
+// to remove the contents of e.g. <style lang="scss"> which can cause parse errors
+// without messing up indices for magic-string
+const removeCSS = ({ content }) => ({
+    code: ' '.repeat(content.length),
+});
+export class SvelteTransformer extends Transformer {
+    // state
+    currentElement;
+    currentSnippet = 0;
+    moduleExportExprs = []; // to choose which runtime var to use for snippets
+    mixedVisitor;
+    constructor(ctx, heuristic, patterns, rtConf) {
+        super(ctx, heuristic, patterns, rtConf, [varNames.rt, rtModuleVar]);
+        this.heuristciDetails.insideProgram = false;
+        this.mixedVisitor = this.initMixedVisitor();
+    }
+    visitExpressionTag(node) {
+        return this.visit(node.expression);
+    }
+    visitVariableDeclarator(node) {
+        const msgs = super.visitVariableDeclarator(node);
+        const init = node.init;
+        if (!msgs.length ||
+            (this.heuristciDetails.declaring != null && this.heuristciDetails.declaring !== 'variable') ||
+            init == null ||
+            init.type === 'ArrowFunctionExpression' ||
+            init.type === 'FunctionExpression') {
+            return msgs;
+        }
+        const needsWrapping = msgs.some(msg => {
+            if (msg.details.leftSide) {
+                return false;
+            }
+            const call = msg.details.topLevelCall ?? msg.details.call ?? '';
+            if (noWrapTopCalls.includes(call) || noWrapTopCalls.some(c => call.startsWith(`${c}.`))) {
+                return false;
+            }
+            if (msg.details.declaring !== 'variable') {
+                return false;
+            }
+            return true;
+        });
+        if (!needsWrapping) {
+            return msgs;
+        }
+        const isExported = this.moduleExportExprs.some(node => init.start >= node.start && init.end <= node.end);
+        if (!isExported && this.initReactive()) {
+            this.mstr.appendLeft(init.start, '$derived(');
+            this.mstr.appendRight(init.end, ')');
+        }
+        return msgs;
+    }
+    initMixedVisitor() {
+        return new MixedVisitor({
+            mstr: this.mstr,
+            index: this.index,
+            content: this.content,
+            vars: this.vars.bind(this),
+            getRange: node => ({ start: node.start, end: node.end }),
+            isText: node => node.type === 'Text',
+            isComment: node => node.type === 'Comment',
+            leaveInPlace: node => ['ConstTag', 'SnippetBlock'].includes(node.type),
+            isExpression: node => node.type === 'ExpressionTag',
+            getTextContent: node => node.data,
+            getCommentData: node => node.data.trim(),
+            visitFunc: this.visitSv.bind(this),
+            fullHeuristicDetails: this.fullHeuristicDetails.bind(this),
+            checkHeuristic: this.getHeuristicMessageType.bind(this),
+            wrapNested: (inNested, msgInfo, hasExprs, nestedRanges, lastChildEnd) => {
+                const snippets = [];
+                const vars = this.vars();
+                // create and reference snippets
+                for (const [childStart, childEnd, haveCtx] of nestedRanges) {
+                    const snippetName = `${snipPrefix}${this.currentSnippet}`;
+                    snippets.push(snippetName);
+                    this.currentSnippet++;
+                    const snippetBegin = `\n{#snippet ${snippetName}(${haveCtx ? vars.nestCtx : ''})}\n`;
+                    this.mstr.appendRight(childStart, snippetBegin);
+                    this.mstr.prependLeft(childEnd, '\n{/snippet}\n');
+                }
+                let begin = `\n<${rtComponent}`;
+                if (snippets.length) {
+                    begin += ` t={[${snippets.join(', ')}]}`;
+                }
+                begin += ' x=';
+                if (inNested) {
+                    begin += `{${vars.nestCtx}} n`;
+                }
+                else {
+                    const index = this.index.get(getKey(msgInfo.msgStr, msgInfo.context));
+                    begin += `{${vars.rtCtx}(${index})}`;
+                }
+                let end = ' />\n';
+                if (hasExprs) {
+                    begin += ' a={[';
+                    end = `]}${end}`;
+                }
+                this.mstr.appendLeft(lastChildEnd, begin);
+                this.mstr.appendRight(lastChildEnd, end);
+            },
+        });
+    }
+    visitFragment(node, nestable = false) {
+        return this.mixedVisitor.visit({
+            children: node.nodes,
+            nestable,
+            commentDirectives: this.commentDirectives,
+            scope: 'markup',
+            element: this.currentElement,
+            useComponent: this.currentElement !== 'title',
+        });
+    }
+    visitRegularElement(node) {
+        const currentElement = this.currentElement;
+        this.currentElement = node.name;
+        const msgs = [];
+        for (const attrib of node.attributes) {
+            msgs.push(...this.visitSv(attrib));
+        }
+        msgs.push(...this.visitFragment(node.fragment, true));
+        this.currentElement = currentElement;
+        return msgs;
+    }
+    visitComponent(node) {
+        return this.visitRegularElement(node);
+    }
+    visitSpreadAttribute(node) {
+        return this.visit(node.expression);
+    }
+    visitAttribute(node) {
+        if (node.value === true) {
+            return [];
+        }
+        let values;
+        if (Array.isArray(node.value)) {
+            values = node.value;
+        }
+        else {
+            values = [node.value];
+        }
+        if (values.length > 1) {
+            const msgs = this.mixedVisitor.visit({
+                children: values,
+                nestable: false,
+                commentDirectives: this.commentDirectives,
+                scope: 'attribute',
+                element: this.currentElement,
+                attribute: node.name,
+            });
+            msgs.push(...this.mixedVisitor.applyMod('attribute'));
+            return msgs;
+        }
+        const value = values[0];
+        const heuDetails = {
+            scope: 'script',
+            element: this.currentElement,
+            attribute: node.name,
+        };
+        if (value.type === 'ExpressionTag') {
+            if (value.expression.type === 'Literal') {
+                const expr = value.expression;
+                return this.visitWithCommentDirectives(expr, () => this.visitLiteral(expr, heuDetails));
+            }
+            if (value.expression.type === 'TemplateLiteral') {
+                const expr = value.expression;
+                return this.visitWithCommentDirectives(expr, () => this.visitTemplateLiteral(expr, heuDetails));
+            }
+            return this.visitSv(value);
+        }
+        heuDetails.scope = 'attribute';
+        const [pass, msgInfo] = this.checkHeuristicAllowNew(value.data, heuDetails);
+        if (!pass) {
+            return [];
+        }
+        this.mstr.update(value.start, value.end, `{${this.literalRepl(msgInfo)}}`);
+        if (`'"`.includes(this.content[value.start - 1])) {
+            this.mstr.remove(value.start - 1, value.start);
+            this.mstr.remove(value.end, value.end + 1);
+        }
+        return [msgInfo];
+    }
+    visitConstTag(node) {
+        // @ts-expect-error
+        return this.visitVariableDeclaration(node.declaration);
+    }
+    visitDeclarationTag(node) {
+        const prevDeclaring = this.heuristciDetails.declaring;
+        this.heuristciDetails.declaring = 'variable';
+        // @ts-expect-error
+        const msgs = this.visitVariableDeclaration(node.declaration);
+        this.heuristciDetails.declaring = prevDeclaring;
+        return msgs;
+    }
+    visitRenderTag(node) {
+        return this.visit(node.expression);
+    }
+    visitHtmlTag(node) {
+        return this.visit(node.expression);
+    }
+    visitOnDirective(node) {
+        return node.expression ? this.visit(node.expression) : [];
+    }
+    hasIdentifier(node, name) {
+        if (!node || typeof node !== 'object') {
+            return false;
+        }
+        if (Array.isArray(node)) {
+            return node.some(child => this.hasIdentifier(child, name));
+        }
+        if (node.type === 'Identifier') {
+            return node.name === name;
+        }
+        return Object.values(node).some(value => this.hasIdentifier(value, name));
+    }
+    visitSnippetBlock(node) {
+        // use module runtime var because the snippet may be exported from the module
+        const prevRtVar = this.currentRtVar;
+        if (this.hasIdentifier(this.moduleExportExprs, node.expression.name)) {
+            this.currentRtVar = rtModuleVar;
+        }
+        const msgs = this.visitFragment(node.body, false);
+        this.currentRtVar = prevRtVar;
+        return msgs;
+    }
+    visitIfBlock(node) {
+        const msgs = this.visit(node.test);
+        msgs.push(...this.visitFragment(node.consequent, false));
+        if (node.alternate) {
+            msgs.push(...this.visitFragment(node.alternate, false));
+        }
+        return msgs;
+    }
+    visitEachBlock(node) {
+        const msgs = [...this.visit(node.expression), ...this.visitFragment(node.body, false)];
+        if (node.key) {
+            msgs.push(...this.visit(node.key));
+        }
+        if (node.fallback) {
+            msgs.push(...this.visitFragment(node.fallback, false));
+        }
+        return msgs;
+    }
+    visitKeyBlock(node) {
+        return [...this.visit(node.expression), ...this.visitFragment(node.fragment, false)];
+    }
+    visitAwaitBlock(node) {
+        const msgs = this.visit(node.expression);
+        if (node.then) {
+            msgs.push(...this.visitFragment(node.then, false));
+        }
+        if (node.pending) {
+            msgs.push(...this.visitFragment(node.pending, false));
+        }
+        if (node.catch) {
+            msgs.push(...this.visitFragment(node.catch, false));
+        }
+        return msgs;
+    }
+    visitSvelteBody(node) {
+        return node.attributes.flatMap(n => this.visitSv(n));
+    }
+    visitSvelteDocument(node) {
+        return node.attributes.flatMap(n => this.visitSv(n));
+    }
+    visitSvelteElement(node) {
+        const currentElement = this.currentElement;
+        if (node.tag.type === 'Literal' && typeof node.tag.value === 'string') {
+            this.currentElement = node.tag.value;
+        }
+        else {
+            this.currentElement = 'svelte:element';
+        }
+        const msgs = [...node.attributes.flatMap(n => this.visitSv(n)), ...this.visitFragment(node.fragment, true)];
+        this.currentElement = currentElement;
+        return msgs;
+    }
+    visitSvelteBoundary(node) {
+        return [...node.attributes.flatMap(n => this.visitSv(n)), ...this.visitSv(node.fragment)];
+    }
+    visitSvelteHead(node) {
+        return this.visitSv(node.fragment);
+    }
+    visitTitleElement(node) {
+        return this.visitRegularElement(node);
+    }
+    visitSvelteWindow(node) {
+        return node.attributes.flatMap(n => this.visitSv(n));
+    }
+    visitRoot(node) {
+        const msgs = [];
+        if (node.module) {
+            const prevRtVar = this.currentRtVar;
+            this.currentRtVar = rtModuleVar;
+            this.runtimeCtx = { module: true };
+            this.commentDirectives = {}; // reset
+            // @ts-expect-error
+            msgs.push(...this.visitProgram(node.module.content));
+            const runtimeInit = this.initRuntime();
+            if (runtimeInit) {
+                this.mstr.appendRight(
+                // @ts-expect-error
+                this.getRealBodyStart(node.module.content.body) ?? node.module.content.start, runtimeInit);
+            }
+            this.runtimeCtx = { module: false }; // reset
+            this.currentRtVar = prevRtVar; // reset
+        }
+        if (node.instance) {
+            this.commentDirectives = {}; // reset
+            msgs.push(...this.visitProgram(node.instance.content));
+        }
+        msgs.push(...this.visitFragment(node.fragment, false));
+        return msgs;
+    }
+    visitSv(node) {
+        return this.visit(node);
+    }
+    /** collects the ranges that will be checked if a snippet identifier is exported using RegExp test to simplify */
+    collectModuleExportExprs(script) {
+        for (const stmt of script.content.body) {
+            if (stmt.type !== 'ExportNamedDeclaration') {
+                continue;
+            }
+            for (const spec of stmt.specifiers) {
+                if (spec.local.type === 'Identifier') {
+                    const local = spec.local;
+                    this.moduleExportExprs.push(local);
+                }
+            }
+            const declaration = stmt.declaration;
+            if (!declaration) {
+                continue;
+            }
+            if (declaration.type === 'FunctionDeclaration' || declaration.type === 'ClassDeclaration') {
+                this.moduleExportExprs.push(declaration);
+                continue;
+            }
+            for (const decl of declaration?.declarations ?? []) {
+                if (!decl.init) {
+                    continue;
+                }
+                this.moduleExportExprs.push(decl.init);
+            }
+        }
+    }
+    async transformSv() {
+        const isComponent = this.heuristciDetails.file.endsWith('.svelte');
+        let ast;
+        if (isComponent) {
+            const prepd = await preprocess(this.content, { style: removeCSS });
+            ast = parse(prepd.code, { modern: true });
+        }
+        else {
+            ;
+            [ast, this.comments] = parseScript(this.content);
+        }
+        if (ast.type === 'Root' && ast.module) {
+            this.collectModuleExportExprs(ast.module);
+        }
+        const msgs = this.visitSv(ast);
+        const initRuntime = this.initRuntime();
+        if (ast.type === 'Program') {
+            const bodyStart = this.getRealBodyStart(ast.body) ?? 0;
+            if (initRuntime) {
+                this.mstr.appendRight(bodyStart, initRuntime);
+            }
+            return this.finalize(msgs, bodyStart);
+        }
+        let headerIndex = 0;
+        if (ast.module) {
+            // @ts-expect-error
+            headerIndex = this.getRealBodyStart(ast.module.content.body) ?? ast.module.content.start;
+        }
+        if (ast.instance) {
+            // @ts-expect-error
+            const instanceBodyStart = this.getRealBodyStart(ast.instance.content.body) ?? ast.instance.content.start;
+            if (!ast.module) {
+                headerIndex = instanceBodyStart;
+            }
+            if (initRuntime) {
+                this.mstr.appendRight(instanceBodyStart, initRuntime);
+            }
+        }
+        else {
+            const instanceStart = ast.module?.end ?? 0;
+            this.mstr.prependLeft(instanceStart, '\n<script>');
+            // account index for hmr data here
+            this.mstr.prependRight(instanceStart, `${initRuntime}\n</script>\n`);
+            // now hmr data can be prependRight(0, ...)
+        }
+        return this.finalize(msgs, headerIndex, headerAdd);
+    }
+}

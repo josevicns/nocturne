@@ -1,0 +1,211 @@
+import type { MotionProp } from '../utils/motion.svelte.js';
+import type { ChartState } from './chart.svelte.js';
+export type TransformMode = 'canvas' | 'domain' | 'projection' | 'none';
+export type TransformScrollMode = 'scale' | 'translate' | 'none';
+export type ScrollActivationKey = 'meta' | 'alt' | 'control' | 'shift';
+export declare const DEFAULT_TRANSLATE: {
+    x: number;
+    y: number;
+};
+export declare const DEFAULT_SCALE = 1;
+export type TransformAxis = 'x' | 'y' | 'both';
+export type TransformConstraint = {
+    scale: number;
+    translate: {
+        x: number;
+        y: number;
+    };
+};
+export type InertiaOptions = {
+    /** Decay factor controlling how far inertia carries. Higher = further. Default: 0.99 */
+    decay?: number;
+    /** Minimum velocity (px/ms) to trigger inertia. Default: 0.1 */
+    minVelocity?: number;
+    /** Maximum velocity (px/ms) to cap inertia. Prevents wild throws. Default: Infinity (no cap) */
+    maxVelocity?: number;
+    /** Time window (ms) to measure velocity from recent pointer movement. Default: 160 */
+    velocityWindow?: number;
+};
+export type TransformStateOptions = {
+    mode?: TransformMode;
+    axis?: TransformAxis;
+    motion?: MotionProp;
+    processTranslate?: (x: number, y: number, deltaX: number, deltaY: number) => {
+        x: number;
+        y: number;
+    };
+    disablePointer?: boolean;
+    scrollMode?: TransformScrollMode;
+    clickDistance?: number;
+    initialTranslate?: {
+        x: number;
+        y: number;
+    };
+    initialScale?: number;
+    onTransform?: (details: {
+        scale: number;
+        translate: {
+            x: number;
+            y: number;
+        };
+    }) => void;
+    ondragstart?: () => void;
+    ondragend?: () => void;
+    /** Enable inertia (momentum) after drag release. Pass `true` for defaults or an options object. */
+    inertia?: boolean | InertiaOptions;
+    /**
+     * Enable two-finger pinch-to-zoom (and simultaneous pan) on touch devices.
+     * Trackpad pinch (wheel + ctrl) is always supported when `scrollMode` is not `none`.
+     * Default: `true`
+     */
+    pinch?: boolean;
+    /** Require a modifier key to be held for scroll/wheel to activate zoom/pan. Default: no key required. */
+    scrollActivationKey?: ScrollActivationKey;
+    /** Min/max scale factor [minScale, maxScale]. Default: no limit. */
+    scaleExtent?: [number, number];
+    /** Translate bounds [[minX, minY], [maxX, maxY]]. Default: no limit. */
+    translateExtent?: [[number, number], [number, number]];
+    /**
+     * Custom constraint function called after every transform update.
+     * Return corrected scale/translate values.
+     * Called after scaleExtent and translateExtent are applied.
+     */
+    constrain?: (transform: TransformConstraint) => TransformConstraint;
+};
+export declare class TransformState {
+    ctx: ChartState | null;
+    mode: TransformMode;
+    axis: TransformAxis;
+    processTranslate?: (x: number, y: number, deltaX: number, deltaY: number) => {
+        x: number;
+        y: number;
+    };
+    disablePointer: boolean;
+    clickDistance: number;
+    initialTranslate: {
+        x: number;
+        y: number;
+    };
+    initialScale: number;
+    onTransform: (details: {
+        scale: number;
+        translate: {
+            x: number;
+            y: number;
+        };
+    }) => void;
+    ondragstart: () => void;
+    ondragend: () => void;
+    scrollActivationKey: ScrollActivationKey | undefined;
+    scaleExtent: [number, number] | undefined;
+    translateExtent: [[number, number], [number, number]] | undefined;
+    constrain: ((transform: TransformConstraint) => TransformConstraint) | undefined;
+    inertia: {
+        enabled: boolean;
+        decay: number;
+        minVelocity: number;
+        maxVelocity: number;
+        velocityWindow: number;
+    };
+    pinch: boolean;
+    pointerDown: boolean;
+    dragging: boolean;
+    pinching: boolean;
+    scrollMode: TransformScrollMode;
+    startPoint: {
+        x: number;
+        y: number;
+    };
+    startTranslate: {
+        x: number;
+        y: number;
+    };
+    private _pointerSamples;
+    private _pointers;
+    private _pinchStart;
+    private _translate;
+    private _scale;
+    private _translating;
+    private _scaling;
+    constructor(ctx: ChartState | null, options?: TransformStateOptions);
+    private _applyTranslate;
+    /** Clamp scale and translate using scaleExtent, translateExtent, and custom constrain. */
+    private _clampScale;
+    private _clampTranslate;
+    private _applyConstraints;
+    /**
+     * Motion options which apply the change immediately (used while following a pointer/wheel gesture)
+     */
+    private _instantMotion;
+    /**
+     * In domain mode, reflect the Y coordinate since screen Y is inverted vs data Y.  This ensures
+     * zooming targets the correct data position under the cursor/gesture.
+     */
+    private _reflectPoint;
+    get moving(): boolean;
+    get scale(): number;
+    set scale(value: number);
+    get translate(): {
+        x: number;
+        y: number;
+    };
+    set translate(point: {
+        x: number;
+        y: number;
+    });
+    setScrollMode(mode: TransformScrollMode): void;
+    reset(): void;
+    zoomIn(): void;
+    zoomOut(): void;
+    translateCenter(): void;
+    zoomTo(center: {
+        x: number;
+        y: number;
+    }, rect?: {
+        width: number;
+        height: number;
+    }): void;
+    setTranslate(point: {
+        x: number;
+        y: number;
+    }, options?: Parameters<typeof this._translate.set>[1]): void;
+    setScale(value: number, options?: Parameters<typeof this._scale.set>[1]): void;
+    scaleTo(value: number, point: {
+        x: number;
+        y: number;
+    }, options?: Parameters<typeof this._scale.set>[1] | undefined): void;
+    /** Continue receiving events for a pointer after it leaves the element */
+    private _capturePointer;
+    /** The two oldest active pointers, if a pinch gesture is possible */
+    private _pinchPoints;
+    /** Distance between pinch pointers, restricted to the active axis in domain mode */
+    private _pinchDistance;
+    /** Capture the current scale/translate as the reference for the (re)starting pinch gesture */
+    private _startPinch;
+    private _endPinch;
+    private _updatePinch;
+    onPointerDown(e: PointerEvent & {
+        currentTarget: HTMLElement;
+    }): void;
+    onPointerMove(e: PointerEvent & {
+        currentTarget: HTMLElement;
+    }): void;
+    onPointerUp(e: PointerEvent & {
+        currentTarget: HTMLElement;
+    }): void;
+    /**
+     * Release a cancelled pointer (ex. touch interrupted by the browser).  Without this, stale
+     * pointers would remain active and be treated as part of a subsequent pinch gesture.
+     */
+    onPointerCancel(e: PointerEvent & {
+        currentTarget: HTMLElement;
+    }): void;
+    onDoubleClick(e: MouseEvent & {
+        currentTarget: HTMLElement;
+    }): void;
+    private _isActivationKeyHeld;
+    onWheel(e: WheelEvent & {
+        currentTarget: HTMLElement;
+    }): void;
+}
+export declare function createDefaultTransformState(): TransformState;

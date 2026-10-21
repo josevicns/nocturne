@@ -1,0 +1,1 @@
+{"version":3,"file":"message-parser.d.ts","sourceRoot":"","sources":["../src/message-parser.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAiB,MAAM,MAAM,CAAC;AAC9C,OAAO,KAAK,EAAE,gBAAgB,EAAE,mBAAmB,EAAE,MAAM,YAAY,CAAC;AAKxE,wBAAgB,iBAAiB,CAC/B,KAAK,EAAE,mBAAmB,EAC1B,QAAQ,EAAE,MAAM,EAChB,WAAW,EAAE,MAAM,GAClB,OAAO,CAAC,gBAAgB,CAAC,CA8C3B"}

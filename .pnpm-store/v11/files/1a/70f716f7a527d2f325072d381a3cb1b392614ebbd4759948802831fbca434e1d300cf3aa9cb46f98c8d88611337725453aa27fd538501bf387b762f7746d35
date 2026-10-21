@@ -1,0 +1,126 @@
+import { pointRadial } from 'd3-shape';
+import { isScaleBand } from '../../utils/scales.svelte.js';
+import { accessor } from '../../utils/common.js';
+import { getChartContext } from '../../contexts/chart.js';
+import { getGeoContext } from '../../contexts/geo.js';
+/**
+ * Reactive state shared by every per-layer Points variant. Holds the
+ * computed `points` array from the chart context.
+ */
+export class PointsState {
+    #getProps = () => ({});
+    /**
+     * Memoized props — the component's props closure allocates a fresh object
+     * (it spreads `rest`), so calling it once per derived meant one allocation
+     * per derived per update. Read it once here instead.
+     */
+    #props = $derived(this.#getProps());
+    ctx = getChartContext();
+    geo = getGeoContext();
+    constructor(getProps) {
+        this.#getProps = getProps;
+        this.ctx.registerComponent({
+            name: 'Points',
+            kind: 'mark',
+            markInfo: () => {
+                const p = this.#props;
+                return {
+                    data: p.data,
+                    x: p.x,
+                    y: p.y,
+                    seriesKey: p.seriesKey,
+                    color: (p.fill ?? p.stroke),
+                };
+            },
+        });
+    }
+    series = $derived(this.ctx.series.series.find((s) => s.key === this.#props.seriesKey));
+    seriesAccessor = $derived(this.series?.value ?? (this.series?.data ? undefined : this.series?.key));
+    stackAccessors = $derived.by(() => {
+        const seriesKey = this.#props.seriesKey;
+        return seriesKey && this.ctx.series.isStacked
+            ? this.ctx.series.getStackAccessors(seriesKey)
+            : null;
+    });
+    xAccessor = $derived(accessor(this.#props.x ?? (this.ctx.valueAxis === 'x' ? this.seriesAccessor : undefined) ?? this.ctx.x));
+    yAccessor = $derived.by(() => {
+        const props = this.#props;
+        if (props.y)
+            return accessor(props.y);
+        if (this.stackAccessors)
+            return this.stackAccessors.y1;
+        if (Array.isArray(this.seriesAccessor) && this.ctx.valueAxis === 'y') {
+            return accessor(this.seriesAccessor[1]);
+        }
+        return accessor((this.ctx.valueAxis === 'y' ? this.seriesAccessor : undefined) ?? this.ctx.y);
+    });
+    pointsData = $derived(this.#props.data ?? this.series?.data ?? this.ctx.data);
+    #getOffset(value, offset, scale, subScale) {
+        const seriesKey = this.#props.seriesKey;
+        if (typeof offset === 'function') {
+            return offset(value, this.ctx);
+        }
+        else if (offset != null) {
+            return offset;
+        }
+        else if (subScale && seriesKey) {
+            return subScale(seriesKey) + (subScale.bandwidth?.() ?? 0) / 2;
+        }
+        else if (isScaleBand(scale) && !this.ctx.radial) {
+            return scale.bandwidth() / 2;
+        }
+        return 0;
+    }
+    #getPointObject(xVal, yVal, d, edgeIndex) {
+        const props = this.#props;
+        // In a geo chart, project the [x, y] pair directly (no band offsets / radial)
+        if (this.geo.projection) {
+            const [projX, projY] = this.geo.projection([xVal, yVal]) ?? [0, 0];
+            return {
+                x: projX,
+                y: projY,
+                r: this.ctx.config.r ? this.ctx.rGet(d) : (props.r ?? 5),
+                xValue: xVal,
+                yValue: yVal,
+                data: d,
+                edgeIndex,
+            };
+        }
+        const scaledX = this.ctx.xScale(xVal);
+        const scaledY = this.ctx.yScale(yVal);
+        const x = scaledX +
+            this.#getOffset(scaledX, props.offsetX, this.ctx.xScale, this.ctx.x1Scale ?? undefined);
+        const y = scaledY +
+            this.#getOffset(scaledY, props.offsetY, this.ctx.yScale, this.ctx.y1Scale ?? undefined);
+        const radialPoint = pointRadial(x, y);
+        return {
+            x: this.ctx.radial ? radialPoint[0] : x,
+            y: this.ctx.radial ? radialPoint[1] : y,
+            r: this.ctx.config.r ? this.ctx.rGet(d) : (props.r ?? 5),
+            xValue: xVal,
+            yValue: yVal,
+            data: d,
+            edgeIndex,
+        };
+    }
+    points = $derived.by(() => {
+        return this.pointsData.flatMap((d) => {
+            const xValue = this.xAccessor(d);
+            const yValue = this.yAccessor(d);
+            if (Array.isArray(xValue)) {
+                return xValue
+                    .filter(Boolean)
+                    .map((xVal, i) => this.#getPointObject(xVal, yValue, d, i));
+            }
+            else if (Array.isArray(yValue)) {
+                return yValue
+                    .filter(Boolean)
+                    .map((yVal, i) => this.#getPointObject(xValue, yVal, d, i));
+            }
+            else if (xValue != null && yValue != null) {
+                return this.#getPointObject(xValue, yValue, d);
+            }
+            return [];
+        });
+    });
+}

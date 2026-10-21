@@ -1,0 +1,57 @@
+import type { ComponentProps } from 'svelte';
+import type { SVGAttributes } from 'svelte/elements';
+import { type Area as D3Area, type CurveFactory } from 'd3-shape';
+import type { Without } from '../../utils/types.js';
+import { type Accessor } from '../../utils/common.js';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+import type Spline from '../Spline/Spline.svelte';
+import type { PathProps } from '../Path/Path.shared.svelte.js';
+export type AreaPropsWithoutHTML = {
+    /** Override data instead of using context */
+    data?: any;
+    /** Pass `<path d={...} />` explicitly instead of calculating from data / context */
+    pathData?: string | null;
+    /** Override x accessor */
+    x?: Accessor;
+    /** Override y0 accessor. Defaults to max($yRange) */
+    y0?: Accessor;
+    /** Override y1 accessor. Defaults to y accessor */
+    y1?: Accessor;
+    /** Series key to use for accessor. */
+    seriesKey?: string;
+    /** Whether to tween the interpolated path data using d3-interpolate-path */
+    motion?: MotionProp;
+    curve?: CurveFactory;
+    defined?: Parameters<D3Area<any>['defined']>[0];
+    /** Enable showing line @default false */
+    line?: boolean | Partial<ComponentProps<typeof Spline>>;
+} & Omit<PathProps, 'x' | 'y' | 'y0' | 'y1'>;
+export type AreaProps = AreaPropsWithoutHTML & Without<SVGAttributes<SVGPathElement>, AreaPropsWithoutHTML>;
+/**
+ * Reactive state shared by every per-layer Area variant. Holds the
+ * computed `d` (path data), tween state, accessors, and `lineYAccessor`.
+ */
+export declare class AreaState {
+    #private;
+    ctx: ChartState;
+    constructor(getProps: () => AreaProps);
+    series: import("../index.js").SeriesData<any, any> | undefined;
+    seriesData: any[] | undefined;
+    seriesAccessor: string | number | ((d: any) => any) | Accessor<any>[] | undefined;
+    stackAccessors: {
+        y0: (d: any) => number;
+        y1: (d: any) => number;
+        value: (d: any) => [number, number] | null;
+    } | null;
+    xAccessor: (d: any) => any;
+    y0Accessor: (d: any) => any;
+    y1Accessor: (d: any) => any;
+    resolvedData: any;
+    xOffset: number;
+    yOffset: number;
+    d: string | undefined;
+    get tweenedPath(): any;
+    lineYAccessor: ((d: any) => any) | undefined;
+    pathOpacity: number;
+}

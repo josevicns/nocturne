@@ -1,0 +1,41 @@
+import { pie as d3pie } from 'd3-shape';
+import { min, max } from 'd3-array';
+import { degreesToRadians } from '../../utils/math.js';
+import { createMotion } from '../../utils/motion.svelte.js';
+import { getChartContext } from '../../contexts/chart.js';
+/**
+ * Reactive state shared by every per-layer Pie variant. Builds the
+ * d3-pie generator and resolved `arcs` array.
+ */
+export class PieState {
+    #getProps = () => ({});
+    ctx = getChartContext();
+    #motionEndAngle;
+    constructor(getProps) {
+        this.#getProps = getProps;
+        this.#motionEndAngle = createMotion(0, () => this.endAngle, getProps().motion);
+    }
+    range = $derived(this.#getProps().range ?? [0, 360]);
+    endAngle = $derived.by(() => {
+        const props = this.#getProps();
+        return (props.endAngle ??
+            degreesToRadians((this.ctx.config.xRange ? max(this.ctx.config.xRange) : max(this.range))));
+    });
+    pie = $derived.by(() => {
+        const props = this.#getProps();
+        let _pie = d3pie()
+            .startAngle(props.startAngle ??
+            degreesToRadians((this.ctx.config.xRange ? min(this.ctx.config.xRange) : min(this.range))))
+            .endAngle(this.#motionEndAngle.current)
+            .padAngle(props.padAngle ?? 0)
+            .value(this.ctx.x);
+        if (props.sort === null) {
+            _pie = _pie.sort(null);
+        }
+        else if (props.sort) {
+            _pie = _pie.sort(props.sort);
+        }
+        return _pie;
+    });
+    arcs = $derived(this.pie(this.#getProps().data ?? (Array.isArray(this.ctx.data) ? this.ctx.data : [])));
+}

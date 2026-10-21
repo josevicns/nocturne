@@ -1,0 +1,151 @@
+export type BrushDomainType = Array<number | Date | string | null>;
+/**
+ * For band scales, expand a [first, last] brush selection into the full category subarray.
+ * For continuous scales, returns the domain unchanged.
+ */
+export declare function expandBandBrushDomain(brushDomain: BrushDomainType, baseDomain: any[]): BrushDomainType;
+export type BrushRange = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+/** Minimum/maximum selection size, per axis. */
+export type BrushExtent = {
+    x?: number;
+    y?: number;
+};
+/** Candidate brush selection passed to a custom `constrain` function. */
+export type BrushSelection = {
+    x: BrushDomainType;
+    y: BrushDomainType;
+};
+/**
+ * Minimal interface for the chart context that BrushState depends on.
+ * Narrowed from ChartState to only what brush needs, enabling easier testing.
+ */
+export type BrushChartContext = {
+    xScale: ((v: any) => number) & {
+        bandwidth?: () => number;
+    };
+    yScale: ((v: any) => number) & {
+        bandwidth?: () => number;
+    };
+    baseXScale: {
+        domain: () => any[];
+    };
+    baseYScale: {
+        domain: () => any[];
+    };
+    width: number;
+    height: number;
+};
+export declare class BrushState {
+    ctx: BrushChartContext | null;
+    x: BrushDomainType;
+    y: BrushDomainType;
+    active: boolean | undefined;
+    axis: "x" | "y" | "both";
+    handleSize: number;
+    /**
+     * Minimum selection size per axis. In domain units for continuous scales (e.g. milliseconds
+     * for time scales), or number of categories for band/point scales.
+     */
+    minExtent: BrushExtent | undefined;
+    /**
+     * Maximum selection size per axis. In domain units for continuous scales (e.g. milliseconds
+     * for time scales), or number of categories for band/point scales.
+     */
+    maxExtent: BrushExtent | undefined;
+    /**
+     * Custom constraint function, called after `min/maxExtent` on every selection update
+     * (create/resize/move/programmatic). Return corrected `{ x, y }` domain values — e.g. to snap
+     * edges to boundaries. Mirrors `TransformState.constrain`.
+     */
+    constrain: ((selection: BrushSelection) => BrushSelection) | undefined;
+    /**
+     * Keep the selection within the domain extent. Enabled by default — pointer gestures already
+     * clamp to the domain, so this additionally clamps `constrain` output (e.g. a snap that rounds
+     * past the first/last value). Set `false` to allow `constrain` to place edges outside the domain.
+     */
+    constrainToDomain: boolean;
+    constructor(ctx: typeof this.ctx, options?: {
+        x?: BrushDomainType;
+        y?: BrushDomainType;
+        active?: boolean;
+        axis?: 'x' | 'y' | 'both';
+        minExtent?: BrushExtent;
+        maxExtent?: BrushExtent;
+        constrain?: (selection: BrushSelection) => BrushSelection;
+        constrainToDomain?: boolean;
+    });
+    /** The domain extent bounds from the base (unzoomed) scales */
+    get xDomainMin(): any;
+    get xDomainMax(): any;
+    get yDomainMin(): any;
+    get yDomainMax(): any;
+    get range(): {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    };
+    /** Reset brush to cleared state */
+    reset(): void;
+    /** Select the full domain extent (capped by `maxExtent` from the domain start, if set) */
+    selectAll(): void;
+    /** Programmatically set the brush selection. Like d3's `brush.move()`. */
+    move(selection: {
+        x?: BrushDomainType | null;
+        y?: BrushDomainType | null;
+    }): void;
+    /** Set brush to a new range, clamped to domain bounds */
+    setRange(startValue: {
+        x: any;
+        y: any;
+    }, currentValue: {
+        x: any;
+        y: any;
+    }): void;
+    /** Move the entire brush range by a delta, clamped to domain bounds */
+    moveRange(start: {
+        x: [any, any];
+        y: [any, any];
+        value: {
+            x: any;
+            y: any;
+        };
+    }, currentValue: {
+        x: any;
+        y: any;
+    }): void;
+    /** Adjust a single edge of the brush, clamped to domain bounds. Handles inversion if dragged past opposite edge. */
+    adjustEdge(edge: 'top' | 'bottom' | 'left' | 'right', start: {
+        x: [any, any];
+        y: [any, any];
+    }, currentValue: {
+        x: any;
+        y: any;
+    }): void;
+    /** Which endpoint (if any) equals `anchorValue` and should be held fixed while clamping extent. */
+    private _anchorIndex;
+    /**
+     * Clamp one axis' selection to `min/maxExtent`, holding the endpoint at `anchorValue` fixed
+     * (the edge the user isn't dragging). A `null` anchor shrinks/grows symmetrically about the
+     * center. Extent is measured in domain units (continuous) or category count (band/point).
+     */
+    private _clampExtent;
+    /** Clamp both endpoints of one axis to the domain extent. */
+    private _clampToDomain;
+    /**
+     * Apply extent limits (for each axis whose anchor is provided), then the custom `constrain`,
+     * then re-clamp to the domain (unless `constrainToDomain` is disabled). `anchor.x`/`anchor.y`
+     * is the domain value to hold fixed; `null` = symmetric. Mirrors `TransformState._applyConstraints`.
+     */
+    private _applyConstraints;
+    /**
+     * Sync external domain values into brush state.
+     * Only writes when values actually differ to avoid reactive loops.
+     */
+    syncFromExternal(externalX: BrushDomainType | null | undefined, externalY: BrushDomainType | null | undefined): void;
+}

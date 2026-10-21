@@ -1,0 +1,91 @@
+import type { Component } from 'svelte';
+import type { SeriesData } from '../components/charts/types.js';
+import { type Accessor } from '../utils/common.js';
+import { SelectionState } from '@layerstack/svelte-state';
+export type StackLayout = 'overlap' | 'stack' | 'stackExpand' | 'stackDiverging';
+export type StackConfig<TData> = {
+    layout: StackLayout;
+    data?: TData[];
+    keyBy: Accessor<TData>;
+    valueAccessor?: Accessor<TData>;
+};
+export declare class SeriesState<TData, TComponent extends Component> {
+    #private;
+    private _getSeries;
+    private _getStackConfig;
+    selectedKeys: SelectionState<string>;
+    /**
+     * The current highlight series key for the chart.
+     */
+    highlightKey: string | null;
+    constructor(getSeries: () => SeriesData<TData, TComponent>[], getStackConfig?: () => StackConfig<TData> | null);
+    /**
+     * Whether stacking is enabled
+     */
+    get isStacked(): boolean;
+    /**
+     * Current stack layout mode
+     */
+    get stackLayout(): StackLayout;
+    /**
+     * For stackDiverging layout, returns the set of series keys that are "tips"
+     * (outermost in each direction) and should have rounded edges.
+     * Returns null for non-diverging layouts.
+     */
+    get divergingEdgeKeys(): Set<string> | null;
+    /**
+     * Get stack [y0, y1] values for a data point in a specific series.
+     * Returns null if stacking is not enabled or series/data not found.
+     */
+    getStackValue(seriesKey: string, d: TData): [number, number] | null;
+    /**
+     * Collect every stacked [y0, y1] value across `rows` for the visible series.
+     *
+     * Calling `getStackValue()` once per row per series rebuilds the `keyBy`
+     * accessor and re-reads the `#stackMap`/`#stackConfig` deriveds O(rows × series)
+     * times. Hoisting both out of the loop measured ~5.5x faster across 30–1000 rows.
+     */
+    getStackedValues(rows: TData[]): number[];
+    /**
+     * Create stack-aware y0/y1 accessor functions for a series.
+     * Use these in Area, Bars, etc. when stacking is enabled.
+     */
+    getStackAccessors(seriesKey: string): {
+        y0: (d: TData) => number;
+        y1: (d: TData) => number;
+        /** Returns the [y0, y1] tuple, useful for Bars */
+        value: (d: TData) => [number, number] | null;
+    };
+    /**
+     * Get all series for the chart.
+     */
+    get series(): SeriesData<TData, TComponent>[];
+    /**
+     * Get only visible series for the chart.
+     */
+    get visibleSeries(): SeriesData<TData, TComponent>[];
+    /**
+     * Check if series is visible
+     */
+    isVisible(seriesKey: SeriesData<TData, TComponent>['key']): boolean;
+    /**
+     * Check if the series is the default
+     */
+    get isDefaultSeries(): boolean;
+    /**
+     * Check if series is highlighted
+     * Changing default to `true` is useful to determine if series should be faded
+     */
+    isHighlighted(seriesKey: SeriesData<TData, TComponent>['key'], defaultValue?: boolean): boolean;
+    get allSeriesData(): Array<TData & {
+        seriesKey: string;
+    }>;
+    /**
+     * Get data from only visible series (filtered by selectedKeys).
+     * Use this for domain calculations when series can be shown/hidden.
+     */
+    get visibleSeriesData(): Array<TData & {
+        seriesKey: string;
+    }>;
+    get allSeriesColors(): Array<NonNullable<SeriesData<TData, TComponent>["color"]>>;
+}

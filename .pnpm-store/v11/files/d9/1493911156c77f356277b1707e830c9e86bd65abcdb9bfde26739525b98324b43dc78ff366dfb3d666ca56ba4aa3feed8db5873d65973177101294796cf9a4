@@ -1,0 +1,29 @@
+export { MixedVisitor, type ModFunc } from './mixed-visitor.js';
+import type { HeuristicResultChecked } from '../adapters.js';
+export declare const varNames: {
+    rt: string;
+    hmrUpdate: string;
+    urlLocalize: string;
+};
+export declare function runtimeVars(wrapFunc: (expr: string) => string, base?: string): {
+    rtTrans: string;
+    rtTPlural: string;
+    rtPlural: string;
+    rtLocale: string;
+    rtCtx: string;
+    rtTransCtx: string;
+    rtTransTag: string;
+    /** for when nesting, used in adapters with elements */
+    nestCtx: string;
+};
+export type RuntimeVars = ReturnType<typeof runtimeVars>;
+export declare function loaderPathResolver(importMetaUrl: string, baseDir: string, ext: string): (name: string) => string;
+export declare const commentPrefix = "@wc-";
+export type CommentDirectives = {
+    ignoreFile?: boolean;
+    unit?: boolean;
+    forceType?: HeuristicResultChecked;
+    context?: string;
+};
+export declare function updateCommentDirectives(data: string, directives: CommentDirectives): void;
+export declare function restoreCommentDirectives(target: CommentDirectives, original: CommentDirectives): void;

@@ -1,0 +1,44 @@
+export class WebhookHandler {
+    resend;
+    webhookSecret;
+    constructor(resend, webhookSecret) {
+        this.resend = resend;
+        this.webhookSecret = webhookSecret;
+    }
+    async parseWebhookRequest(request) {
+        const body = await request.text();
+        const svixId = request.headers.get("svix-id") || "";
+        const svixTimestamp = request.headers.get("svix-timestamp") || "";
+        const svixSignature = request.headers.get("svix-signature") || "";
+        let payload;
+        try {
+            payload = this.resend.webhooks.verify({
+                payload: body,
+                headers: {
+                    id: svixId,
+                    timestamp: svixTimestamp,
+                    signature: svixSignature,
+                },
+                webhookSecret: this.webhookSecret,
+            });
+        }
+        catch {
+            return { status: 401, event: null };
+        }
+        if (payload.type !== "email.received") {
+            return { status: 200, event: null };
+        }
+        return {
+            status: 200,
+            event: payload,
+        };
+    }
+    async fetchEmailContent(emailId) {
+        const response = await this.resend.emails.receiving.get(emailId);
+        if (response.error || !response.data) {
+            throw new Error(`Failed to fetch email content: ${response.error?.message || "Unknown error"}`);
+        }
+        return response.data;
+    }
+}
+//# sourceMappingURL=webhook-handler.js.map

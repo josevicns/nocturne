@@ -1,0 +1,50 @@
+import { Context } from 'runed';
+const _ChartContext = new Context('ChartContext');
+/**
+ * Fallback context when used outside of a Chart component.
+ * Provides safe defaults to prevent runtime errors.
+ */
+const fallbackContext = {
+    registerMark: () => () => {
+        /* no-op */
+    },
+    registerComponent: (_options) => ({
+        id: Symbol('noop'),
+        kind: 'mark',
+        name: 'noop',
+        parent: null,
+        children: [],
+        insideCompositeMark: false,
+    }),
+    series: {
+        series: [],
+        visibleSeries: [],
+        highlightKey: null,
+        isVisible: () => true,
+        isHighlighted: () => false,
+        isDefaultSeries: true,
+        allSeriesData: [],
+        allSeriesColors: [],
+        selectedKeys: { isEmpty: () => true, isSelected: () => false },
+    },
+    tooltip: {
+        x: 0,
+        y: 0,
+        data: null,
+        series: [],
+        config: {},
+        isHoveringTooltipArea: false,
+        isHoveringTooltipContent: false,
+        mode: 'manual',
+        show: () => { },
+        hide: () => { },
+    },
+};
+export function getChartContext() {
+    // @ts-expect-error - Type variance is acceptable here
+    return _ChartContext.getOr(fallbackContext);
+}
+export function setChartContext(context) {
+    // @ts-expect-error - shh
+    return _ChartContext.set(context);
+}

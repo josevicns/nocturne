@@ -1,0 +1,15 @@
+import { type URLConf, type UrlMatcher } from '../adapters.js';
+import type AIQueue from '../ai/index.js';
+import { type Catalog } from '../storage.js';
+import { type Pattern, type URLManifest } from '../url.js';
+export declare class URLHandler {
+    readonly locales: string[];
+    readonly sourceLocale: string;
+    readonly patterns: string[];
+    readonly compiledPatterns: Map<string, Pattern>[];
+    constructor(locales: string[], sourceLocale: string, urlConf?: URLConf);
+    buildManifest: () => URLManifest;
+    initPatterns: (adapterKey: string, catalog: Catalog, fallbackChains: Map<string, string[]>, aiQueue?: AIQueue) => Promise<boolean>;
+    match: UrlMatcher;
+    matchToCompile: (key: string, locale: string) => string;
+}

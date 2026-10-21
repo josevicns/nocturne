@@ -1,0 +1,9 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { type Runtime } from '../runtime.js';
+import type { LoaderFunc } from './index.js';
+type LoadedRuntimes = Record<string, Runtime[]>;
+export declare const runtimeCtx: AsyncLocalStorage<LoadedRuntimes>;
+export declare function currentRuntime(key: string, loadID: number): Runtime;
+export declare function loadLocales(key: string, loadCount: number, load: LoaderFunc, locales: string[]): Promise<(loadID?: number) => Runtime>;
+export declare function runWithLocale<T>(locale: string, func: () => T): Promise<T>;
+export {};

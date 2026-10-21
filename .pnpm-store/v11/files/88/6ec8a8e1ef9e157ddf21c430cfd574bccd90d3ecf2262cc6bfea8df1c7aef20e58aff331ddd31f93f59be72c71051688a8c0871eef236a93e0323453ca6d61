@@ -1,0 +1,108 @@
+import { hashMessageId } from "./utils.js";
+const WHITESPACE_RE = /\s+/;
+export class ThreadResolver {
+    messageToThread = new Map();
+    threadMessages = new Map();
+    threadSubjects = new Map();
+    encodeThreadId(id) {
+        return `resend:${id.toAddress}:${id.rootMessageIdHash}`;
+    }
+    decodeThreadId(threadId) {
+        const parts = threadId.split(":");
+        if (parts.length !== 3 || parts[0] !== "resend" || !parts[1] || !parts[2]) {
+            throw new Error(`Invalid thread ID format: ${threadId}`);
+        }
+        return {
+            toAddress: parts[1],
+            rootMessageIdHash: parts[2],
+        };
+    }
+    async resolveThreadId(input) {
+        const { toAddress, messageId, inReplyTo, references } = input;
+        if (inReplyTo || references) {
+            const candidateIds = this.extractMessageIds(inReplyTo, references);
+            for (const candidate of candidateIds) {
+                const existingThread = this.messageToThread.get(candidate);
+                if (existingThread) {
+                    this.trackMessage(existingThread, messageId);
+                    return existingThread;
+                }
+            }
+        }
+        const hash = await hashMessageId(messageId);
+        const threadId = this.encodeThreadId({
+            toAddress,
+            rootMessageIdHash: hash,
+        });
+        this.trackMessage(threadId, messageId);
+        return threadId;
+    }
+    trackMessage(threadId, messageId) {
+        this.messageToThread.set(messageId, threadId);
+        const messages = this.threadMessages.get(threadId) || [];
+        if (!messages.includes(messageId)) {
+            messages.push(messageId);
+        }
+        this.threadMessages.set(threadId, messages);
+    }
+    getLastMessageId(threadId) {
+        const messages = this.threadMessages.get(threadId);
+        if (!messages || messages.length === 0) {
+            return undefined;
+        }
+        return messages.at(-1);
+    }
+    getReplyHeaders(threadId) {
+        const lastMessageId = this.getLastMessageId(threadId);
+        if (!lastMessageId) {
+            return undefined;
+        }
+        const messages = this.threadMessages.get(threadId) || [];
+        return {
+            "In-Reply-To": lastMessageId,
+            References: messages.join(" "),
+        };
+    }
+    trackSubject(threadId, subject) {
+        if (!this.threadSubjects.has(threadId)) {
+            this.threadSubjects.set(threadId, subject);
+        }
+    }
+    getSubject(threadId) {
+        return this.threadSubjects.get(threadId);
+    }
+    /**
+     * Extract all candidate message IDs from In-Reply-To and References headers.
+     * Handles both RFC 2822 whitespace-separated format and Resend's
+     * JSON-encoded array format (e.g. `["<id1>","<id2>"]`).
+     */
+    extractMessageIds(inReplyTo, references) {
+        const ids = [];
+        if (references) {
+            const trimmed = references.trim();
+            if (trimmed.startsWith("[")) {
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    if (Array.isArray(parsed)) {
+                        ids.push(...parsed.map((s) => s.trim()).filter(Boolean));
+                    }
+                }
+                catch {
+                    // Fall back to whitespace splitting if JSON parse fails
+                    ids.push(...trimmed.split(WHITESPACE_RE).filter(Boolean));
+                }
+            }
+            else {
+                ids.push(...trimmed.split(WHITESPACE_RE).filter(Boolean));
+            }
+        }
+        if (inReplyTo) {
+            const trimmed = inReplyTo.trim();
+            if (trimmed && !ids.includes(trimmed)) {
+                ids.push(trimmed);
+            }
+        }
+        return ids;
+    }
+}
+//# sourceMappingURL=thread-resolver.js.map

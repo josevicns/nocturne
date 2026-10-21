@@ -1,0 +1,44 @@
+import type { Adapter, GlobConf, LoaderPath, LoadGroupPatt } from '../adapters.js';
+import type { CompiledElement } from '../compile.js';
+import type { FS } from '../fs.js';
+import type { URLManifest } from '../url.js';
+export declare const dataFileName = "data.js";
+export declare const generatedDir = ".wuchale";
+export declare const defaultLoadID = 0;
+export type ManifestEntryObj = {
+    text: string | string[];
+    context?: string | undefined;
+    isUrl?: boolean | undefined;
+};
+export type ManifestEntry = string | string[] | ManifestEntryObj | null;
+export type FilesOptsCreatePass = {
+    adapter: Adapter;
+    key: string;
+    fs: FS;
+    root: string;
+};
+export type FilesOptsCreate = FilesOptsCreatePass & {
+    ownerKey: string;
+    localesDirAbs: string;
+};
+export declare const objKeyLocale: (locale: string) => string;
+export declare function normalizeSep(path: string): string;
+export declare function globConfToArgs(conf: GlobConf, localesDir: string): [string[], string[]];
+export declare function getLoaderPath(adapter: Adapter, key: string, localesDirAbs: string, root: string, fs: FS): Promise<LoaderPath>;
+export declare class Files {
+    #private;
+    readonly loaderPath: LoaderPath;
+    private constructor();
+    getCompiledFilePath(loc: string, id: number | null): string;
+    getImportPath(filename: string, importer?: string): string;
+    genProxyContent(catalogs: string[], patterns: LoadGroupPatt[], locales: string[], syncImports?: string[]): string;
+    genProxy(locales: string[], patterns: LoadGroupPatt[]): string;
+    genProxySync(locales: string[], patterns: LoadGroupPatt[]): string;
+    writeProxies: (locales: string[], groupPatterns: LoadGroupPatt[]) => Promise<void>;
+    static create: (opts: FilesOptsCreate) => Promise<Files>;
+    writeUrlFiles: (manifest: URLManifest, fallbackLocale: string) => Promise<void>;
+    getManifestFilePath(id: number | null): string;
+    writeManifest: (keys: ManifestEntry[], id: number | null) => Promise<void>;
+    writeCatalogModule: (compiledData: CompiledElement[], pluralRule: string | null, locale: string, hmrVersion: number | null, loadID: number | null) => Promise<void>;
+    getImportLoaderPath(forServer: boolean, relativeTo: string): string;
+}

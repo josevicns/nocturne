@@ -1,0 +1,6 @@
+import type { Root } from "mdast";
+export declare class ResendFormatConverter {
+    fromAst(ast: Root): string;
+    toAst(text: string): Root;
+}
+//# sourceMappingURL=format-converter.d.ts.map

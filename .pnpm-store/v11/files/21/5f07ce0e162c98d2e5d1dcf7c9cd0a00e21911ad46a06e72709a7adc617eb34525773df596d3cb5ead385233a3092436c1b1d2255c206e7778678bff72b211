@@ -1,0 +1,30 @@
+import { chartDataArray } from '../../utils/common.js';
+import { getChartContext } from '../../contexts/chart.js';
+/**
+ * Reactive state shared by every per-layer Bars variant.
+ */
+export class BarsState {
+    #getProps = () => ({});
+    ctx = getChartContext();
+    constructor(getProps) {
+        this.#getProps = getProps;
+        this.ctx.registerComponent({
+            name: 'Bars',
+            kind: 'mark',
+            markInfo: () => {
+                const p = getProps();
+                return {
+                    data: p.data,
+                    seriesKey: p.seriesKey,
+                    color: p.fill,
+                };
+            },
+        });
+    }
+    series = $derived.by(() => {
+        const seriesKey = this.#getProps().seriesKey;
+        return seriesKey ? this.ctx.series.series.find((s) => s.key === seriesKey) : undefined;
+    });
+    seriesData = $derived(this.series?.data);
+    data = $derived(chartDataArray(this.#getProps().data ?? this.seriesData ?? this.ctx.data));
+}

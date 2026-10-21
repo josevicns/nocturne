@@ -1,0 +1,15 @@
+import type { Resend } from "resend";
+import type { ResendReceivedEmail, ResendWebhookPayload } from "./types.js";
+interface WebhookResult {
+    event: ResendWebhookPayload | null;
+    status: number;
+}
+export declare class WebhookHandler {
+    private readonly resend;
+    private readonly webhookSecret;
+    constructor(resend: Resend, webhookSecret: string);
+    parseWebhookRequest(request: Request): Promise<WebhookResult>;
+    fetchEmailContent(emailId: string): Promise<ResendReceivedEmail>;
+}
+export {};
+//# sourceMappingURL=webhook-handler.d.ts.map

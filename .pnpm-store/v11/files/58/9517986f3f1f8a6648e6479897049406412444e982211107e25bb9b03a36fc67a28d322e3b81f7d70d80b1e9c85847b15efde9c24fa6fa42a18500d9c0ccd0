@@ -1,0 +1,20 @@
+import { type TSchema } from '../../types/schema.mjs';
+import { type TParameter } from '../../types/parameter.mjs';
+import { type TCallConstruct } from '../../types/call.mjs';
+import { type TRef } from '../../types/ref.mjs';
+import { type TGeneric } from '../../types/generic.mjs';
+import { type TProperties } from '../../types/properties.mjs';
+import { type TState } from '../instantiate.mjs';
+import { type TInstantiateType } from '../instantiate.mjs';
+import { type TInstantiateTypes } from '../instantiate.mjs';
+import { type TResolveTarget } from './resolve-target.mjs';
+import { type TResolveArgumentsContext } from './resolve-arguments.mjs';
+type TPeek<CallStack extends string[], Result extends string = CallStack extends [infer Left extends string, ...infer _ extends string[]] ? Left : ''> = Result;
+type TDeferredCall<Context extends TProperties, State extends TState, Target extends TSchema, Arguments extends TSchema[], InstantiatedArguments extends TSchema[] = TInstantiateTypes<Context, State, Arguments>, DeferredCall extends TSchema = TCallConstruct<Target, InstantiatedArguments>> = DeferredCall;
+type TTailCall<Context extends TProperties, State extends TState, Name extends string, Arguments extends TSchema[], DeferredCall extends TSchema = TDeferredCall<Context, State, TRef<Name>, Arguments>> = DeferredCall;
+type THeadCall<Context extends TProperties, State extends TState, Name extends string, Parameters extends TParameter[], Expression extends TSchema, Arguments extends TSchema[], InstantiatedArguments extends TSchema[] = TInstantiateTypes<Context, State, Arguments>, ArgumentsContext extends TProperties = TResolveArgumentsContext<Context, State, Parameters, InstantiatedArguments>, ReturnType extends TSchema = TInstantiateType<ArgumentsContext, {
+    callstack: [...State['callstack'], Name];
+}, Expression>> = TInstantiateType<Context, State, ReturnType>;
+export type TCallInstantiate<Context extends TProperties, State extends TState, Target extends TSchema, Arguments extends TSchema[], Resolved extends [string, TSchema] = TResolveTarget<Context, Target, Arguments>, Name extends string = Resolved[0], Type extends TSchema = Resolved[1], Result extends TSchema = (Type extends TGeneric<infer Parameters extends TParameter[], infer Expression extends TSchema> ? TPeek<State['callstack']> extends Name ? TTailCall<Context, State, Name, Arguments> : THeadCall<Context, State, Name, Parameters, Expression, Arguments> : TDeferredCall<Context, State, Target, Arguments>)> = Result;
+export declare function CallInstantiate<Context extends TProperties, State extends TState, Target extends TSchema, Arguments extends TSchema[]>(context: Context, state: State, target: Target, arguments_: [...Arguments]): TCallInstantiate<Context, State, Target, Arguments>;
+export {};

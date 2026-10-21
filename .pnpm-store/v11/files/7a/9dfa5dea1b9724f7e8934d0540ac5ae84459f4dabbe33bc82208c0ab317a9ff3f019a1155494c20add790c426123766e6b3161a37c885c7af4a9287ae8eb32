@@ -1,0 +1,125 @@
+import type { SVGAttributes } from 'svelte/elements';
+import type { Without } from '../../utils/types.js';
+import type { DataProp, DataDrivenStyleProps } from '../../utils/dataProp.js';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+import type { GeoState } from '../../states/geo.svelte.js';
+import type { MarkerOptions } from '../MarkerWrapper.svelte';
+export type LinePropsWithoutHTML = {
+    /**
+     * The x-coordinate of the line's starting point.
+     * - `number`: pixel value (direct)
+     * - `string`: data property name, resolved via xScale
+     * - `function(d)`: accessor called per data item, result passed through xScale
+     *
+     * @required
+     */
+    x1: DataProp;
+    /** The initial x-coordinate of the line's starting point (pixel mode only). @default x1 */
+    initialX1?: number;
+    /**
+     * The y-coordinate of the line's starting point.
+     * - `number`: pixel value (direct)
+     * - `string`: data property name, resolved via yScale
+     * - `function(d)`: accessor called per data item, result passed through yScale
+     *
+     * @required
+     */
+    y1: DataProp;
+    /** The initial y-coordinate of the line's starting point (pixel mode only). @default y1 */
+    initialY1?: number;
+    /**
+     * The x-coordinate of the line's ending point.
+     * - `number`: pixel value (direct)
+     * - `string`: data property name, resolved via xScale
+     * - `function(d)`: accessor called per data item, result passed through xScale
+     *
+     * @required
+     */
+    x2: DataProp;
+    /** The initial x-coordinate of the line's ending point (pixel mode only). @default x2 */
+    initialX2?: number;
+    /**
+     * The y-coordinate of the line's ending point.
+     * - `number`: pixel value (direct)
+     * - `string`: data property name, resolved via yScale
+     * - `function(d)`: accessor called per data item, result passed through yScale
+     *
+     * @default y2
+     */
+    y2: DataProp;
+    /** The initial y-coordinate of the line's ending point (pixel mode only). @default y2 */
+    initialY2?: number;
+    /**
+     * Data array to iterate over in data mode.
+     * Falls back to chart context data when not provided.
+     */
+    data?: any[];
+    /**
+     * Key function for keyed {#each} rendering in data mode.
+     *
+     * @default (d, i) => i
+     */
+    key?: (d: any, index: number) => any;
+    /** Marker to attach to both start and end points of the line */
+    marker?: MarkerOptions;
+    /** Marker to attach to the start point of the line */
+    markerStart?: MarkerOptions;
+    /** Marker to attach to the mid point of the line */
+    markerMid?: MarkerOptions;
+    /** Marker to attach to the end point of the line */
+    markerEnd?: MarkerOptions;
+    /** Motion configuration (pixel mode only). */
+    motion?: MotionProp;
+    /**
+     * Dashed-line pattern. Accepts a number (single dash length), a
+     * `[dash, gap, ...]` array, or a string (same syntax as SVG
+     * `stroke-dasharray`). Works across `<Svg>`, `<Canvas>`, and `<Html>`
+     * layers — HTML approximates the pattern via `repeating-linear-gradient`.
+     */
+    dashArray?: number | number[] | string;
+} & DataDrivenStyleProps;
+export type LineProps = LinePropsWithoutHTML & Without<SVGAttributes<SVGPathElement>, LinePropsWithoutHTML>;
+/** Build the standard `markInfo` payload used by every Line variant. */
+export declare function lineMarkInfo(props: LineProps, dataMode: boolean): {
+    data?: undefined;
+    x?: undefined;
+    y?: undefined;
+    color?: undefined;
+} | {
+    data: any[] | undefined;
+    x: string | undefined;
+    y: string | undefined;
+    color: string | undefined;
+};
+/**
+ * Reactive state shared by every per-layer Line variant.
+ */
+export declare class LineState {
+    #private;
+    chartCtx: ChartState;
+    geo: GeoState;
+    dataMode: boolean;
+    resolvedItems: {
+        d: any;
+        key: any;
+        x1: number;
+        y1: number;
+        x2: number;
+        y2: number;
+    }[];
+    dashArrayResolved: number[] | null;
+    dashArrayAttr: string | undefined;
+    get motionX1(): any;
+    get motionY1(): any;
+    get motionX2(): any;
+    get motionY2(): any;
+    staticFill: string | undefined;
+    staticFillOpacity: number | undefined;
+    staticStroke: string | undefined;
+    staticStrokeWidth: number | undefined;
+    staticOpacity: number | undefined;
+    staticClassName: string | undefined;
+    staticHeight: string;
+    constructor(getProps: () => LineProps);
+}

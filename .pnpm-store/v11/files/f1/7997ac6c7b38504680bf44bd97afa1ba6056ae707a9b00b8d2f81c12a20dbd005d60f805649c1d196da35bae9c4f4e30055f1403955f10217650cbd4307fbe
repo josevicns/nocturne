@@ -1,0 +1,88 @@
+{
+  "name": "@shadcn/lint",
+  "version": "0.2.0",
+  "description": "A programmable agent-first linter for Tailwind design systems.",
+  "license": "MIT",
+  "author": {
+    "name": "shadcn",
+    "url": "https://twitter.com/shadcn"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shadcn-ui/lint.git",
+    "directory": "packages/lint"
+  },
+  "homepage": "https://github.com/shadcn-ui/lint#readme",
+  "bugs": {
+    "url": "https://github.com/shadcn-ui/lint/issues"
+  },
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": [
+    "./dist/tailwind-worker.js"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "shadcn",
+    "lint",
+    "eslint",
+    "oxlint",
+    "tailwind",
+    "tailwindcss",
+    "design-system",
+    "cn"
+  ],
+  "dependencies": {
+    "@eslint/core": "^0.17.0",
+    "cn": "0.3.2"
+  },
+  "peerDependencies": {
+    "@typescript-eslint/parser": ">=8.40.0",
+    "eslint": ">=9.30.0"
+  },
+  "peerDependenciesMeta": {
+    "@typescript-eslint/parser": {
+      "optional": true
+    },
+    "eslint": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@typescript-eslint/parser": "^8.40.0",
+    "eslint": "^9.33.0",
+    "oxlint": "^1.80.0",
+    "svelte": "^5.57.1",
+    "svelte-eslint-parser": "^1.8.1",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.3",
+    "tsdown": "^0.12.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.6",
+    "vue-eslint-parser": "^10.4.1"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "optionalDependencies": {
+    "oxc-parser": "^0.148.0"
+  },
+  "scripts": {
+    "build": "tsdown && node scripts/postbuild.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  }
+}

@@ -1,0 +1,9 @@
+export type FS = {
+    read(file: string): string | null | Promise<string | null>;
+    write(file: string, content: string): void | Promise<void>;
+    mkdir(path: string): void | Promise<void>;
+    exists(path: string): boolean | Promise<boolean>;
+    unlink(path: string): boolean | Promise<boolean>;
+};
+export declare const defaultFS: FS;
+export declare const readOnlyFS: FS;

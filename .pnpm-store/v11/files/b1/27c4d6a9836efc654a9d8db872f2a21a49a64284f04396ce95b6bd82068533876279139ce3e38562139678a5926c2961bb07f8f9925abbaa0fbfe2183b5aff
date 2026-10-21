@@ -1,0 +1,66 @@
+import type { SVGAttributes } from 'svelte/elements';
+import type { Without } from '../../utils/types.js';
+import { type Accessor } from '../../utils/common.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+import type { LinePropsWithoutHTML } from '../Line/Line.shared.svelte.js';
+export type BaseRulePropsWithoutHTML = {
+    /**
+     * Override the data from the context.
+     */
+    data?: any;
+    /**
+     * Create a vertical `x` line
+     * - If true or 'left', will draw at chart left (xRange[0])
+     * - If 'right', will draw at chart right (xRange[1])
+     * - Use `0` for baseline (yScale(0))
+     * - Use number | Date value for annotation (yScale(value))
+     *
+     * @default false
+     */
+    x?: number | Date | boolean | '$left' | '$right' | Accessor;
+    /**
+     * Pixel offset to apply to `x` coordinate
+     *
+     * @default 0
+     */
+    xOffset?: number;
+    /**
+     * Create a horizontal `y` line
+     * - If true or 'bottom', will draw at chart bottom (yRange[0])
+     * - If 'top', will draw at chart top (yRange[1])
+     * - Use `0` for baseline (xScale(0))
+     * - Use number | Date value for annotation (xScale(value))
+     *
+     * @default false
+     */
+    y?: number | Date | boolean | '$top' | '$bottom' | Accessor;
+    /**
+     * Pixel offset to apply to `y` coordinate
+     * @default 0
+     */
+    yOffset?: number;
+};
+export type RulePropsWithoutHTML = BaseRulePropsWithoutHTML & Without<Partial<LinePropsWithoutHTML>, BaseRulePropsWithoutHTML>;
+export type RuleProps = RulePropsWithoutHTML & Without<SVGAttributes<SVGElement>, RulePropsWithoutHTML>;
+export type RuleLineSegment = {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    axis: 'x' | 'y';
+    stroke?: string | null;
+};
+/**
+ * Reactive state shared by every per-layer Rule variant.
+ */
+export declare class RuleState {
+    #private;
+    ctx: ChartState;
+    constructor(getProps: () => RuleProps);
+    data: any[];
+    singleX: any;
+    singleY: any;
+    xRangeMinMax: [number, number] | [undefined, undefined];
+    yRangeMinMax: [number, number] | [undefined, undefined];
+    lines: RuleLineSegment[];
+}

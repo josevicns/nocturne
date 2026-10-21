@@ -1,0 +1,28 @@
+import type { ResendThreadId } from "./types.js";
+interface ResolveInput {
+    inReplyTo: string | undefined;
+    messageId: string;
+    references: string | undefined;
+    toAddress: string;
+}
+export declare class ThreadResolver {
+    private readonly messageToThread;
+    private readonly threadMessages;
+    private readonly threadSubjects;
+    encodeThreadId(id: ResendThreadId): string;
+    decodeThreadId(threadId: string): ResendThreadId;
+    resolveThreadId(input: ResolveInput): Promise<string>;
+    trackMessage(threadId: string, messageId: string): void;
+    getLastMessageId(threadId: string): string | undefined;
+    getReplyHeaders(threadId: string): Record<string, string> | undefined;
+    trackSubject(threadId: string, subject: string): void;
+    getSubject(threadId: string): string | undefined;
+    /**
+     * Extract all candidate message IDs from In-Reply-To and References headers.
+     * Handles both RFC 2822 whitespace-separated format and Resend's
+     * JSON-encoded array format (e.g. `["<id1>","<id2>"]`).
+     */
+    private extractMessageIds;
+}
+export {};
+//# sourceMappingURL=thread-resolver.d.ts.map

@@ -1,0 +1,9 @@
+import type { AI, AIPassThruOpts } from './index.js';
+type GeminiOpts = Partial<AIPassThruOpts & {
+    apiKey: string;
+    model: string;
+    think: boolean;
+}>;
+export declare function gemini({ apiKey, model, group, batchSize, think, parallel, }?: GeminiOpts): AI | null;
+export declare const defaultGemini: AI | null;
+export {};

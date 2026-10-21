@@ -1,0 +1,115 @@
+import pm from 'picomatch';
+import { getKey, IndexTracker } from '../adapters.js';
+import { defaultPluralRule, fillTranslations, itemIsObsolete, } from '../storage.js';
+/**
+ * plural rule expressions should be
+ * - made of ternary and binary expressions
+ * - involve the variable n
+ * - always return a number >= 0
+ */
+function validatePluralRule(body) {
+    // strip valid tokens, if anything remains it's suspicious
+    const stripped = body
+        .replace(/[0-9]+/g, '')
+        .replace(/\bn\b/g, '')
+        .replace(/[%!=<>?:()&|+\-\s]/g, '');
+    if (stripped.length > 0) {
+        return false;
+    }
+    // check if it returns a number, just an example
+    // biome-ignore lint: noGlobalEval
+    const num = eval(`(n => ${body})(42)`);
+    return !Number.isNaN(num) && num >= 0;
+}
+/** shared states among multiple adapters handlers */
+export class SharedState {
+    ownerKey;
+    sourceLocale;
+    compiled = new Map();
+    indexTracker;
+    // storage
+    storage;
+    catalog = new Map();
+    pluralRules = new Map();
+    constructor(storage, ownerKey, sourceLocale, allowNewItems) {
+        this.ownerKey = ownerKey;
+        this.sourceLocale = sourceLocale;
+        this.storage = storage;
+        this.indexTracker = new IndexTracker(allowNewItems);
+    }
+    async load(locales) {
+        const loaded = await this.storage.load();
+        this.pluralRules = loaded.pluralRules ?? new Map();
+        for (const loc of locales) {
+            if (!this.pluralRules.has(loc)) {
+                this.pluralRules.set(loc, defaultPluralRule);
+                continue;
+            }
+            const plural = this.pluralRules.get(loc).plural;
+            if (!validatePluralRule(plural)) {
+                throw new Error(`[${this.ownerKey}]: invalid plural rule for ${loc}: ${plural}`);
+            }
+        }
+        for (const item of loaded.items) {
+            fillTranslations(item, locales);
+            const id = item.translations.get(this.sourceLocale);
+            this.catalog.set(getKey(id, item.context), item);
+        }
+    }
+    async save(onlyReferenced) {
+        const items = Array.from(this.catalog.values());
+        await this.storage.save({
+            pluralRules: this.pluralRules,
+            items: onlyReferenced ? items.filter(i => !itemIsObsolete(i)) : items,
+        });
+    }
+}
+export class State {
+    #byFile = new Map();
+    byID = new Map();
+    #writeProxies;
+    groupPatterns = [];
+    #groupMatches = [];
+    constructor(writeProxies, groupPatterns) {
+        this.#writeProxies = writeProxies;
+        this.groupPatterns = groupPatterns;
+        this.#groupMatches = groupPatterns.map(p => pm(p));
+    }
+    #getLoadID(filename) {
+        let id = -1;
+        for (const [i, match] of this.#groupMatches.entries()) {
+            if (!match(filename)) {
+                continue;
+            }
+            id = i;
+        }
+        if (id === -1) {
+            id = this.groupPatterns.length;
+            this.groupPatterns.push(filename);
+            this.#groupMatches.push(f => f === filename);
+        }
+        return id + 1; // not to start from 0 which is reserved for the shared
+    }
+    async byFileCreate(filename, locales, allowNewItems) {
+        let state = this.#byFile.get(filename);
+        if (state != null) {
+            return state;
+        }
+        const id = this.#getLoadID(filename);
+        state = this.byID.get(id);
+        if (!state) {
+            state = {
+                id,
+                compiled: new Map(),
+                indexTracker: new IndexTracker(allowNewItems),
+            };
+            for (const loc of locales) {
+                state.compiled.set(loc, { hasPlurals: false, items: [] });
+            }
+            this.byID.set(id, state);
+            await this.#writeProxies(this.groupPatterns);
+        }
+        this.#byFile.set(filename, state);
+        return state;
+    }
+}

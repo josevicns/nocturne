@@ -1,0 +1,9 @@
+interface Props {
+    language: string;
+    searchQuery: string;
+    filter: 'all' | 'translated' | 'untranslated' | 'fuzzy';
+    apiBase?: string;
+}
+declare const TranslationEditor: import("svelte").Component<Props, {}, "">;
+type TranslationEditor = ReturnType<typeof TranslationEditor>;
+export default TranslationEditor;

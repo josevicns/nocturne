@@ -1,0 +1,318 @@
+// Shared logic between adapters for handling nested / mixed elements within elements / fragments
+import { getKey, newMessage, } from '../adapters.js';
+import { commentPrefix, restoreCommentDirectives, updateCommentDirectives, varNames, } from './index.js';
+const newMod = (building = false, unit = false) => ({
+    msg: null,
+    hasTxtDesc: false,
+    txts: [],
+    building,
+    unit,
+    pending: true,
+    funcs: [],
+    children: [],
+});
+/** trims from end first */
+function trimText(msgStr) {
+    const trimmedE = msgStr.trimEnd();
+    const endWh = msgStr.length - trimmedE.length;
+    const trimmed = trimmedE.trimStart();
+    const startWh = trimmedE.length - trimmed.length;
+    return [startWh, trimmed, endWh];
+}
+export class MixedVisitor {
+    #props;
+    #mod = { markup: newMod(), attribute: newMod() };
+    constructor(props) {
+        this.#props = props;
+    }
+    /** returns false when in dev mode and new messages are not allowed */
+    #checkAllowNewMsg(msg) {
+        return this.#props.index.has(getKey(msg.msgStr, msg.context));
+    }
+    #applyMod(mod, depth = 0) {
+        if (!mod.pending) {
+            return [];
+        }
+        const msgs = [];
+        const nested = depth > 0;
+        let modify = nested;
+        if (!nested) {
+            if (mod.msg) {
+                if (mod.unit) {
+                    mod.msg.type = 'message';
+                    modify = true;
+                }
+                else if (mod.building) {
+                    const heurMsgType = this.#props.checkHeuristic(mod.msg);
+                    if (heurMsgType && this.#checkAllowNewMsg(mod.msg)) {
+                        mod.msg.type = heurMsgType;
+                        modify = true;
+                    }
+                }
+                modify && msgs.push(mod.msg);
+            }
+            if (!modify) {
+                for (const [msg, func] of mod.txts) {
+                    if (!this.#checkAllowNewMsg(msg)) {
+                        continue;
+                    }
+                    msgs.push(msg);
+                    func();
+                }
+            }
+        }
+        if (modify) {
+            for (const func of mod.funcs) {
+                func(nested, mod.msg != null);
+            }
+        }
+        for (const childMod of mod.children) {
+            msgs.push(...this.#applyMod(childMod, depth + (modify ? 1 : 0)));
+        }
+        mod.pending = false;
+        return msgs;
+    }
+    applyMod(scope = 'markup') {
+        const mod = this.#mod[scope];
+        const msgs = this.#applyMod(mod);
+        this.#mod[scope] = newMod(); // in addition to pending for when called for last cleanup
+        return msgs;
+    }
+    #getLastChildEnd(children) {
+        const lastChild = children.slice(-1)[0];
+        const lastChildEnd = this.#props.getRange(lastChild).end;
+        if (this.#props.isText(lastChild)) {
+            const [, , endWh] = trimText(this.#props.getTextContent(lastChild));
+            return lastChildEnd - endWh;
+        }
+        return lastChildEnd;
+    }
+    #makeMsg(props, msgStr, placeholders = []) {
+        return newMessage({
+            msgStr: [msgStr.trim()],
+            details: this.#props.fullHeuristicDetails({
+                scope: props.scope,
+                element: props.element,
+                attribute: props.attribute,
+            }),
+            context: props.commentDirectives.context,
+            placeholders,
+        });
+    }
+    #childNums(children) {
+        const nums = { text: 0, expr: 0, element: 0, comment: 0 };
+        for (const child of children) {
+            if (this.#props.isText(child)) {
+                if (this.#props.getTextContent(child).trim()) {
+                    nums.text++;
+                }
+            }
+            else if (this.#props.isExpression(child)) {
+                nums.expr++;
+            }
+            else if (this.#props.isComment(child)) {
+                nums.comment++;
+            }
+            else {
+                nums.element++;
+            }
+        }
+        return nums;
+    }
+    #text(mod, props, trimOut, range, nums) {
+        let [startWh, trimmed, endWh] = trimOut;
+        let { start, end } = range;
+        const msg = this.#makeMsg(props, trimmed);
+        const heurMsgType = this.#props.checkHeuristic(msg);
+        if (heurMsgType) {
+            msg.type = heurMsgType;
+            mod.hasTxtDesc = true;
+            mod.txts.push([
+                msg,
+                () => {
+                    const index = this.#props.index.get(getKey(msg.msgStr, msg.context));
+                    this.#props.mstr.update(start + startWh, end - endWh, `{${this.#props.vars().rtTrans}(${index})}`);
+                },
+            ]);
+        }
+        mod.funcs.push((nested, lvlHasMsg) => {
+            if (!lvlHasMsg) {
+                // no sibling at this level passes heuristic
+                return;
+            }
+            if (!nested && nums.text === 1 && nums.element === 0 && nums.expr === 0) {
+                start += startWh;
+                end -= endWh;
+            }
+            this.#props.mstr.remove(start, end);
+        });
+        if (endWh) {
+            trimmed += ' ';
+        }
+        return trimmed;
+    }
+    #expression(funcs, range, iArg, placeholders, lastChildEnd) {
+        const start = range.start + 1;
+        const end = range.end - 1;
+        placeholders.push([iArg.toString(), this.#props.content.slice(start, end)]);
+        const firstOne = iArg === 0;
+        funcs.push(() => {
+            let moveStart = range.start;
+            if (firstOne) {
+                moveStart++;
+                this.#props.mstr.remove(range.start, start);
+            }
+            else {
+                this.#props.mstr.update(range.start, start, ', ');
+            }
+            this.#props.mstr.move(moveStart, end, lastChildEnd);
+            this.#props.mstr.remove(end, range.end);
+        });
+        return `{${iArg}}`;
+    }
+    #finalMod(props, msg, lastChildEnd, childrenNestedRanges, hasExpr, nums) {
+        const vars = this.#props.vars();
+        return nested => {
+            if (((props.useComponent ?? true) && props.scope === 'markup' && hasExpr) ||
+                childrenNestedRanges.length > 0) {
+                if (nums.element + nums.text + nums.expr > 1) {
+                    this.#props.wrapNested(nested, msg, hasExpr, childrenNestedRanges, lastChildEnd);
+                }
+                return;
+            }
+            // no need for component use
+            let begin = '{';
+            let end = ')}';
+            if (nested) {
+                begin += `${vars.rtTransCtx}(${vars.nestCtx}`;
+            }
+            else {
+                if (msg.type === 'url') {
+                    begin += `${varNames.urlLocalize}(`;
+                    end = `), ${vars.rtLocale}${end}`;
+                }
+                const index = this.#props.index.get(getKey(msg.msgStr, msg.context));
+                begin += `${vars.rtTrans}(${index}`;
+            }
+            if (hasExpr) {
+                begin += ', [';
+                end = `]${end}`;
+            }
+            if (props.scope === 'attribute' && `'"`.includes(this.#props.content[lastChildEnd])) {
+                const firstChild = props.children[0];
+                const { start } = this.#props.getRange(firstChild);
+                this.#props.mstr.remove(start - 1, start);
+                this.#props.mstr.remove(lastChildEnd, lastChildEnd + 1);
+            }
+            this.#props.mstr.appendLeft(lastChildEnd, begin);
+            this.#props.mstr.appendRight(lastChildEnd, end);
+        };
+    }
+    visit(props) {
+        if (props.children.length === 0) {
+            return [];
+        }
+        let hasCommentDirectives = false;
+        let msgStr = '';
+        let iArg = 0;
+        let iTag = 0;
+        const commentDirectivesOrig = { ...props.commentDirectives };
+        let lastVisitIsComment = false;
+        const lastChildEnd = this.#getLastChildEnd(props.children);
+        const childrenNestedRanges = [];
+        const msgs = [];
+        const placeholders = [];
+        const alreadyInsideUnit = props.commentDirectives.unit ?? false;
+        const mod = this.#mod[props.scope];
+        const nums = this.#childNums(props.children);
+        mod.building = (props.nestable && mod.building) || alreadyInsideUnit || nums.text > 0;
+        if (props.addMod) {
+            mod.funcs.push(props.addMod);
+        }
+        const exprFuncs = [];
+        for (const child of props.children) {
+            if (this.#props.isComment(child)) {
+                const data = this.#props.getCommentData(child);
+                if (data.trim().startsWith(commentPrefix)) {
+                    updateCommentDirectives(data, props.commentDirectives);
+                    hasCommentDirectives = true;
+                }
+                lastVisitIsComment = true;
+                continue;
+            }
+            if (props.commentDirectives.ignoreFile) {
+                return [];
+            }
+            const chRange = this.#props.getRange(child);
+            if (this.#props.isText(child)) {
+                const trimOut = trimText(this.#props.getTextContent(child));
+                const [startWh, trimmed] = trimOut;
+                if ((startWh || trimmed === '') && !msgStr.endsWith(' ')) {
+                    msgStr += ' ';
+                }
+                if (!trimmed) {
+                    // whitespace
+                    continue;
+                }
+                if (props.commentDirectives.forceType !== false) {
+                    msgStr += this.#text(mod, props, trimOut, chRange, nums);
+                }
+            }
+            else if (props.commentDirectives.forceType !== false) {
+                if (this.#props.leaveInPlace(child)) {
+                    msgs.push(...this.#props.visitFunc(child));
+                }
+                else if (this.#props.isExpression(child)) {
+                    msgs.push(...this.#props.visitFunc(child));
+                    if (nums.text > 0 || nums.element > 0) {
+                        msgStr += this.#expression(exprFuncs, chRange, iArg, placeholders, lastChildEnd);
+                        iArg++;
+                    }
+                }
+                else {
+                    // elements, components and other things as well
+                    const childMod = newMod(mod.building, !alreadyInsideUnit && props.commentDirectives.unit);
+                    this.#mod[props.scope] = childMod;
+                    msgs.push(...this.#props.visitFunc(child));
+                    this.#mod[props.scope] = mod;
+                    mod.children.push(childMod);
+                    let nestedNeedsCtx = false;
+                    let chTxt = `<${iTag}/>`;
+                    mod.hasTxtDesc ||= childMod.hasTxtDesc;
+                    if (childMod.pending && childMod.msg) {
+                        if (nums.element === 1 && nums.expr === 0 && nums.text === 0) {
+                            chTxt = childMod.msg.msgStr[0];
+                            placeholders.push(...childMod.msg.placeholders);
+                        }
+                        else if (childMod.hasTxtDesc) {
+                            chTxt = `<${iTag}>${childMod.msg.msgStr[0]}</${iTag}>`;
+                            for (const [num, cont] of childMod.msg.placeholders) {
+                                placeholders.push([`${iTag}.${num}`, cont]);
+                            }
+                            nestedNeedsCtx = true;
+                        }
+                    }
+                    childrenNestedRanges.push([chRange.start, chRange.end, nestedNeedsCtx]);
+                    msgStr += chTxt;
+                    iTag++;
+                }
+            }
+            if (!lastVisitIsComment) {
+                continue;
+            }
+            restoreCommentDirectives(props.commentDirectives, commentDirectivesOrig);
+            lastVisitIsComment = false;
+        }
+        const msg = this.#makeMsg(props, msgStr, placeholders);
+        if (mod.hasTxtDesc) {
+            if (!hasCommentDirectives) {
+                mod.msg = msg; // can be taken together, and lvlHasMsg
+            }
+            mod.funcs.push(...exprFuncs, this.#finalMod(props, msg, lastChildEnd, childrenNestedRanges, iArg > 0, nums));
+        }
+        if (mod.unit || !mod.building || hasCommentDirectives || !props.nestable) {
+            msgs.push(...this.applyMod(props.scope));
+        }
+        return msgs;
+    }
+}

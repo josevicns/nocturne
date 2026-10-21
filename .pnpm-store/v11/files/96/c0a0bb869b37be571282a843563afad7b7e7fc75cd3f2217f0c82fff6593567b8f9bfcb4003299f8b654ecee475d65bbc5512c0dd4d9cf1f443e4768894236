@@ -1,0 +1,62 @@
+// $$ cd .. && npm run test
+import { loaderPathResolver } from '../adapter-utils/index.js';
+import { defaultHeuristicFuncOnly } from '../adapters.js';
+import { fillDefaults } from '../config.js';
+import { pofile } from '../pofile.js';
+import { Transformer } from './transformer.js';
+export { parseScript, scriptParseOptions, scriptParseOptionsWithComments } from './transformer.js';
+export { Transformer };
+export const pluralPattern = {
+    name: 'plural',
+    args: ['other', 'message', 'pluralFunc'],
+};
+export const defaultArgs = {
+    files: { include: 'src/**/*.{js,ts}', ignore: '**/*.d.ts' },
+    storage: pofile(),
+    patterns: [pluralPattern],
+    heuristic: defaultHeuristicFuncOnly,
+    loading: {
+        direct: false,
+        granular: false,
+        group: [],
+    },
+    loader: 'vite',
+    runtime: {
+        initReactive: ({ nested }) => (nested ? null : false),
+        useReactive: false,
+        plain: {
+            wrapInit: expr => expr,
+            wrapUse: expr => expr,
+        },
+        reactive: {
+            wrapInit: expr => expr,
+            wrapUse: expr => expr,
+        },
+    },
+};
+const resolveLoaderPath = loaderPathResolver(import.meta.url, '../../src/adapter-vanilla/loaders', 'js');
+export function getDefaultLoaderPath(loader, bundle) {
+    if (loader === 'custom') {
+        return null;
+    }
+    if (bundle) {
+        return resolveLoaderPath('bundle');
+    }
+    if (loader === 'vite') {
+        return {
+            client: resolveLoaderPath('vite'),
+            server: resolveLoaderPath('vite.ssr'),
+        };
+    }
+    return resolveLoaderPath(loader);
+}
+export const adapter = (args = defaultArgs) => {
+    const { heuristic, patterns, runtime, loader, ...rest } = fillDefaults(args, defaultArgs);
+    return {
+        transform: ctx => new Transformer(ctx, heuristic, patterns, runtime).transform(),
+        loaderExts: ['.js', '.ts'],
+        defaultLoaderPath: getDefaultLoaderPath(loader, rest.loading.direct),
+        runtime,
+        ...rest,
+    };
+};

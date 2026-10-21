@@ -1,0 +1,6 @@
+export type CompositePayload = number | string | Composite;
+export type Composite = [number, ...CompositePayload[]];
+export type Mixed = (string | number)[];
+export type CompiledElement = string | Mixed | CompositePayload[];
+export declare function compileTranslation(msgStr: string, fallback: CompiledElement): CompiledElement;
+export declare function isEquivalent(source: CompiledElement, translation: CompiledElement): boolean;

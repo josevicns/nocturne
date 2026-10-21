@@ -1,0 +1,19 @@
+export type Pattern = (string | number)[];
+export declare function compilePattern(pattern: string): Pattern;
+export declare function matchPattern(pattern: Pattern, url: string): false | string[];
+export declare function stringifyPattern(pattern: Pattern, dynamics: readonly string[]): string;
+export type URLManifestItem = [
+    Pattern,
+    Pattern[]
+] | [Pattern];
+export type URLManifest = URLManifestItem[];
+type MatchResult<L extends string> = {
+    path: string | null;
+    params: string[];
+    altPatterns: Record<L, Pattern>;
+};
+export declare function URLMatcher<L extends string>(manifest: URLManifest, locales: L[]): (url: string, locale: L | null) => MatchResult<L>;
+export type URLLocalizer = (url: string, locale: string) => string;
+export declare const localizeDefault: URLLocalizer;
+export declare const deLocalizeDefault: <L extends string>(path: string, locales: L[]) => [string, L | null];
+export {};

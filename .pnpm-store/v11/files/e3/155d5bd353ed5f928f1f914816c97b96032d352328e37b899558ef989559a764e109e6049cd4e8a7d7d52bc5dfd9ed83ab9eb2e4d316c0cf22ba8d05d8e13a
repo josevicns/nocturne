@@ -1,0 +1,4 @@
+import { Message } from "chat";
+import type { ResendRawMessage, ResendReceivedEmail } from "./types.js";
+export declare function parseInboundEmail(email: ResendReceivedEmail, threadId: string, fromAddress: string): Message<ResendRawMessage>;
+//# sourceMappingURL=message-parser.d.ts.map

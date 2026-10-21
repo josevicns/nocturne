@@ -1,0 +1,112 @@
+import type { AnyScale } from './scales.svelte.js';
+/**
+ * A prop that can be a direct pixel value, a data property name (resolved via scale),
+ * or an accessor function (whose result is passed through a scale).
+ *
+ * - `number` → pixel value (direct, no scale applied)
+ * - `string` → data property path, resolved via accessor then passed through scale
+ * - `function(d)` → called with data item, result passed through scale
+ */
+export type DataProp<T = any> = number | string | ((d: T) => any);
+/**
+ * Returns true if the value is a data-space prop (string or function),
+ * meaning it needs scale resolution rather than being a direct pixel value.
+ */
+export declare function isDataProp(value: any): value is string | Function;
+/**
+ * Returns true if ANY of the provided values is a data-space prop.
+ * Used to detect whether a component should enter "data mode".
+ */
+export declare function hasAnyDataProp(...values: any[]): boolean;
+/**
+ * Resolves a DataProp value for a specific data item through a scale.
+ *
+ * - `number`: returned directly (pixel value, no scale)
+ * - `string`: used as property path on data item, result passed through scale
+ * - `function`: called with data item, result passed through scale
+ * - `undefined`/`null`: returns defaultValue
+ *
+ * If no scale is provided and the raw value is numeric, it passes through directly.
+ */
+export declare function resolveDataProp<T>(value: DataProp<T> | undefined | null, d: T, scale: AnyScale | null | undefined, defaultValue?: number): number;
+/**
+ * Extract the raw value from a DataProp without applying any scale.
+ * Numbers pass through, strings do property lookup, functions are called.
+ */
+export declare function extractRawDataValue<T>(value: DataProp<T> | undefined | null, d: T): any;
+/**
+ * Resolve a pair of x/y DataProps through a geo projection.
+ * x = longitude, y = latitude → projection([lon, lat]) → [px, py]
+ */
+export declare function resolveGeoDataPair<T>(xProp: DataProp<T> | undefined | null, yProp: DataProp<T> | undefined | null, d: T, projection: (coords: [number, number]) => [number, number] | null, defaults?: [number, number]): [number, number];
+/**
+ * A color prop that can be a literal CSS color string, a data property name
+ * (resolved through cScale), or an accessor function (result passed through cScale).
+ *
+ * - `string` → in data mode, if it matches a data property, the value is extracted
+ *   and passed through cScale. Otherwise used as a literal CSS color.
+ * - `function(d)` → called per data item, result passed through cScale.
+ */
+export type ColorProp<T = any> = string | ((d: T) => any);
+/**
+ * A style prop that can be a static value or a per-item accessor function.
+ * In data mode, if a function is provided, it is called with the data item.
+ */
+export type StyleProp<V, T = any> = V | ((d: T) => V);
+/**
+ * Style props for primitives that support data-driven styling.
+ * All style props accept either a static value or a per-item accessor function.
+ */
+export type DataDrivenStyleProps<T = any> = {
+    /**
+     * The fill color.
+     * - `string`: in data mode, if it matches a data property name, the value is
+     *   extracted and passed through cScale. Otherwise used as a literal CSS color.
+     * - `function(d)`: accessor called per data item, result passed through cScale.
+     */
+    fill?: ColorProp<T>;
+    /**
+     * The stroke color.
+     * - `string`: in data mode, if it matches a data property name, the value is
+     *   extracted and passed through cScale. Otherwise used as a literal CSS color.
+     * - `function(d)`: accessor called per data item, result passed through cScale.
+     */
+    stroke?: ColorProp<T>;
+    /**
+     * The fill opacity (0 to 1).
+     * - `number`: static value
+     * - `function(d)`: accessor called per data item
+     */
+    fillOpacity?: StyleProp<number | undefined, T>;
+    /**
+     * The stroke opacity (0 to 1).
+     * - `number`: static value
+     * - `function(d)`: accessor called per data item
+     */
+    strokeOpacity?: StyleProp<number | undefined, T>;
+    /**
+     * The stroke width.
+     * - `number`: static value
+     * - `function(d)`: accessor called per data item
+     */
+    strokeWidth?: StyleProp<number | undefined, T>;
+    /**
+     * The opacity (0 to 1).
+     * - `number`: static value
+     * - `function(d)`: accessor called per data item
+     */
+    opacity?: StyleProp<number | undefined, T>;
+    /**
+     * CSS class name(s).
+     * - `string`: static class string
+     * - `function(d)`: accessor called per data item, returns class string
+     */
+    class?: StyleProp<string | undefined, T>;
+};
+export declare function resolveColorProp<T>(value: ColorProp<T> | undefined | null, d: T, cScale: AnyScale | null | undefined, ...args: any[]): string | undefined;
+/**
+ * Resolves a StyleProp for a specific data item.
+ * If the value is a function, calls it with the data item.
+ * Otherwise returns the static value.
+ */
+export declare function resolveStyleProp<V, T>(value: StyleProp<V, T> | undefined, d: T, ...args: any[]): V | undefined;

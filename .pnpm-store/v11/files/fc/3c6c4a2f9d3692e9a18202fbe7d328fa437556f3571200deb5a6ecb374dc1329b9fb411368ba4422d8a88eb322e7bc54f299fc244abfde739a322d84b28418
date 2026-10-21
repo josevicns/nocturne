@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Next.js",
+  "compilerOptions": {
+    "composite": false,
+    "downlevelIteration": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "inlineSources": false,
+    "isolatedModules": true,
+    "moduleResolution": "bundler",
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "preserveWatchOutput": true,
+    "skipLibCheck": true,
+    "strictNullChecks": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "allowJs": true,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": false,
+    "jsx": "react-jsx",
+    "lib": ["dom", "dom.iterable", "esnext", "ESNext.AsyncIterable"],
+    "noEmit": true,
+    "strict": false,
+    "target": "ESNext",
+    "module": "ESNext",
+    "noUncheckedIndexedAccess": true,
+    "resolveJsonModule": true,
+    "types": ["vitest/globals"],
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/cli/utils/preview/hot-reloading/test",
+    "src/components/tailwind/e2e"
+  ]
+}

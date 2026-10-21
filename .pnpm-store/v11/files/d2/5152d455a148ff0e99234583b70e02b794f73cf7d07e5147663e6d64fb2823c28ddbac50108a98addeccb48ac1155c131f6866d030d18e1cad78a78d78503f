@@ -1,0 +1,18 @@
+import type { XSchema } from '../types/schema.mjs';
+import type { XMinItems } from '../types/minItems.mjs';
+import type { XMaxItems } from '../types/maxItems.mjs';
+import type { XAdditionalItems } from '../types/additionalItems.mjs';
+import type { XStaticSchema } from './schema.mjs';
+import type { XLessThan } from './~comparer.mjs';
+type TElements<Stack extends string[], Root extends XSchema, Schemas extends XSchema[], Result extends unknown[] = []> = (Schemas extends [infer Left extends XSchema, ...infer Right extends XSchema[]] ? TElements<Stack, Root, Right, [...Result, XStaticSchema<Stack, Root, Left>]> : Result);
+type TMaxItemsRemap<Elements extends unknown[], MaxItems extends number, Result extends unknown[] = []> = (Elements extends [infer Left extends unknown, ...infer Right extends unknown[]] ? XLessThan<Result['length'], MaxItems> extends true ? TMaxItemsRemap<Right, MaxItems, [...Result, Left]> : Result : Result);
+type TMaxItems<Schema extends XSchema, Elements extends unknown[], MaxItems extends number | null = Schema extends XMaxItems<infer MaxItems extends number> ? MaxItems : null, Result extends unknown[] = MaxItems extends number ? TMaxItemsRemap<Elements, MaxItems> : Elements> = Result;
+type TNeedsAdditionalItems<Schema extends XSchema, Elements extends unknown[], MaxItems extends number | null = Schema extends XMaxItems<infer MaxItems extends number> ? MaxItems : null, Result extends boolean = MaxItems extends number ? XLessThan<Elements['length'], MaxItems> : true> = Result;
+type TMinItemsRemap<Elements extends unknown[], MinItems extends number, Result extends unknown[] = []> = (Elements extends [infer Left, ...infer Right] ? XLessThan<Result['length'], MinItems> extends true ? TMinItemsRemap<Right, MinItems, [...Result, Left]> : TMinItemsRemap<Right, MinItems, [...Result, Left?]> : Result);
+type TMinItems<Schema extends XSchema, Values extends unknown[], MinItems extends number = Schema extends XMinItems<infer MinItems extends number> ? MinItems : 0, Result extends unknown[] = TMinItemsRemap<Values, MinItems>> = Result;
+type TAdditionalItems<Stack extends string[], Root extends XSchema, Schema extends XSchema, Elements extends unknown[], Result extends unknown[] = Schema extends XAdditionalItems<infer Schema extends XSchema> ? (Schema extends true ? [...Elements, ...unknown[]] : Schema extends false ? [...Elements] : [
+    ...Elements,
+    ...XStaticSchema<Stack, Root, Schema>[]
+]) : [...Elements, ...unknown[]]> = Result;
+export type XStaticElements<Stack extends string[], Root extends XSchema, Schema extends XSchema, PrefixItems extends XSchema[], Elements extends unknown[] = TElements<Stack, Root, PrefixItems>, WithMaxItems extends unknown[] = TMaxItems<Schema, Elements>, NeedsAdditional extends boolean = TNeedsAdditionalItems<Schema, WithMaxItems>, WithMinItems extends unknown[] = TMinItems<Schema, WithMaxItems>, WithAdditionalItems extends unknown[] = NeedsAdditional extends true ? TAdditionalItems<Stack, Root, Schema, WithMinItems> : WithMinItems> = WithAdditionalItems;
+export {};

@@ -1,0 +1,85 @@
+import type { SVGAttributes } from 'svelte/elements';
+import type { Without } from '../../utils/types.js';
+import type { DataProp } from '../../utils/dataProp.js';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+import type { GeoState } from '../../states/geo.svelte.js';
+export type ImagePropsWithoutHTML = {
+    /**
+     * Image URL. In data mode, resolved per item.
+     */
+    href?: string | ((d: any) => string);
+    x?: DataProp;
+    initialX?: number;
+    y?: DataProp;
+    initialY?: number;
+    width?: DataProp;
+    initialWidth?: number;
+    height?: DataProp;
+    initialHeight?: number;
+    /** Circular clip radius. When set, overrides width/height to 2*r. */
+    r?: DataProp;
+    /** Rotation in degrees clockwise. */
+    rotate?: DataProp;
+    /** SVG preserveAspectRatio attribute. @default 'xMidYMid meet' */
+    preserveAspectRatio?: string;
+    /** CORS attribute for the image. */
+    crossOrigin?: '' | 'anonymous' | 'use-credentials';
+    /** Image rendering quality. */
+    imageRendering?: string;
+    /** The opacity of the image. (0 to 1) */
+    opacity?: number;
+    /** Data array to iterate over in data mode. */
+    data?: any[];
+    /** Key function for keyed {#each} rendering in data mode. @default (d, i) => i */
+    key?: (d: any, index: number) => any;
+    /** A bindable reference to the `<image>` element (pixel mode only). @bindable */
+    ref?: SVGImageElement;
+    /** Motion configuration (pixel mode only). */
+    motion?: MotionProp<'x' | 'y' | 'width' | 'height'>;
+};
+export type ImageProps = ImagePropsWithoutHTML & Without<SVGAttributes<SVGImageElement>, ImagePropsWithoutHTML>;
+export declare function imageMarkInfo(props: ImageProps, dataMode: boolean): {
+    data?: undefined;
+    x?: undefined;
+    y?: undefined;
+} | {
+    data: any[] | undefined;
+    x: string | undefined;
+    y: string | undefined;
+};
+export declare class ImageState {
+    #private;
+    chartCtx: ChartState;
+    geo: GeoState;
+    dataMode: boolean;
+    resolveImage(d: any): {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        r: number | undefined;
+        rotate: number | undefined;
+    };
+    resolveHref(d: any): string | undefined;
+    resolvedItems: {
+        d: any;
+        key: any;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        r: number | undefined;
+        rotate: number | undefined;
+    }[];
+    defaultSize: number;
+    resolvedPixelWidth: number;
+    resolvedPixelHeight: number;
+    pixelR: number | undefined;
+    pixelRotate: number | undefined;
+    get motionX(): any;
+    get motionY(): any;
+    get motionWidth(): any;
+    get motionHeight(): any;
+    constructor(getProps: () => ImageProps);
+}

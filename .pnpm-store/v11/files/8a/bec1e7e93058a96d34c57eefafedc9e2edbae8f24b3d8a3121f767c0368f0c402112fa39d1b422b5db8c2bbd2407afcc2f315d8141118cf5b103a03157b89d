@@ -1,0 +1,10 @@
+import type { IncomingMessage, ServerResponse } from 'http';
+interface MiddlewareOptions {
+    localesDir: string;
+    root: string;
+}
+/**
+ * Create API middleware for handling translation operations
+ */
+export declare function createApiMiddleware(options: MiddlewareOptions): (req: IncomingMessage, res: ServerResponse, next: () => void) => Promise<void>;
+export {};

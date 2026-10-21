@@ -1,0 +1,78 @@
+# Installation
+> `npm install --save @types/gettext-parser`
+
+# Summary
+This package contains type definitions for gettext-parser (https://github.com/smhg/gettext-parser).
+
+# Details
+Files were exported from https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/gettext-parser.
+## [index.d.ts](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/gettext-parser/index.d.ts)
+````ts
+/// <reference types="node" />
+
+import { Transform, TransformOptions } from "readable-stream";
+
+export interface GetTextComment {
+    translator?: string;
+    reference?: string;
+    extracted?: string;
+    flag?: string;
+    previous?: string;
+}
+
+export interface GetTextTranslation {
+    msgctxt?: string;
+    msgid: string;
+    msgid_plural?: string;
+    msgstr: string[];
+    comments?: GetTextComment;
+    obsolete?: boolean;
+}
+
+export interface GetTextTranslationRecord {
+    [msgctxt: string]: {
+        [msgId: string]: GetTextTranslation;
+    };
+}
+
+export interface GetTextTranslations {
+    charset: string;
+    headers: { [headerName: string]: string };
+    translations: GetTextTranslationRecord;
+    obsolete?: GetTextTranslationRecord;
+}
+
+export interface GetTextPoParserOptions {
+    defaultCharset?: string;
+    validation?: boolean;
+}
+
+export interface GetTextPoCompilerOptions {
+    foldLength?: number;
+    escapeCharacters?: boolean;
+    sort?: boolean | ((a: GetTextTranslation, b: GetTextTranslation) => number);
+    eol?: string;
+}
+
+export interface PoParser {
+    parse: (buffer: Buffer | string, options?: GetTextPoParserOptions) => GetTextTranslations;
+    compile: (table: GetTextTranslations, options?: GetTextPoCompilerOptions) => Buffer;
+    createParseStream: (options?: GetTextPoParserOptions, transformOptions?: TransformOptions) => Transform;
+}
+
+export interface MoParser {
+    parse: (buffer: Buffer | string, defaultCharset?: string) => GetTextTranslations;
+    compile: (table: GetTextTranslations) => Buffer;
+}
+
+export const po: PoParser;
+export const mo: MoParser;
+
+````
+
+### Additional Details
+ * Last updated: Thu, 13 Feb 2025 22:02:08 GMT
+ * Dependencies: [@types/node](https://npmjs.com/package/@types/node), [@types/readable-stream](https://npmjs.com/package/@types/readable-stream)
+
+# Credits
+These definitions were written by [Lorent Lempereur](https://github.com/looorent).

@@ -1,0 +1,55 @@
+import type { OperationInfo } from '../types.js';
+/** A query one mutation refreshes, resolved against the spec. */
+export interface InvalidationTarget {
+    /** The query the `Invalidates` entry named. */
+    operation: OperationInfo;
+    /** Identifier the emitting file uses to reach the query function. */
+    localName: string;
+    /**
+     * Module the query is exported from, when it lives in another tag's file.
+     * Undefined for a query declared in the emitting file.
+     */
+    importFrom?: string;
+    /** The name that module exports, when {@link localName} is an alias for it. */
+    exportedName?: string;
+}
+/** The imports and per-operation refresh statements one generated file needs. */
+export interface FileInvalidationPlan {
+    /** Import lines for queries this file refreshes but does not declare. */
+    importLines: string[];
+    /** Refresh targets per declaring operationId, empty for operations with none. */
+    targetsByOperationId: Map<string, InvalidationTarget[]>;
+    /** Whether any emitted refresh needs `requested` from the server module. */
+    usesRequested: boolean;
+}
+/**
+ * Resolve one `Invalidates` entry to the query it names.
+ *
+ * A bare name ("GetNotes") names a query in the declaring operation's own tag; a
+ * qualified one ("Trackers_GetActiveInstances") is a full operationId and may name
+ * a query under any tag. The target's tag comes from the operation the spec
+ * declares, never from the prefix: the prefix is a controller name while the tag
+ * decides the file ("V4 Member Invites" -> memberInvites), and they routinely differ.
+ *
+ * Only a query resolves, since only a query can be refreshed.
+ */
+export declare function resolveInvalidationTarget(invalidate: string, declaringOp: OperationInfo, allOperations: OperationInfo[]): OperationInfo | undefined;
+/**
+ * Resolve every `Invalidates` declaration in one tag, and name the queries that
+ * live elsewhere.
+ *
+ * An imported name is aliased only when it would collide, with a function the
+ * file declares itself or with another import.
+ */
+export declare function planFileInvalidations(tag: string, operations: OperationInfo[], allOperations: OperationInfo[]): FileInvalidationPlan;
+/**
+ * The refresh expressions for one mutation, as thunks for `refreshInvalidated`.
+ *
+ * A query cache is keyed per argument, so each target needs two: the key the
+ * generator can name unaided (see {@link fixedKeyArgument}), and every key the
+ * client asked for by passing the query function to `.updates()`.
+ * `getBodyWeights({ count: 100 })` is not the key `getBodyWeights(undefined)`
+ * names, and only the client knows it holds the first. `refreshAll` is free when
+ * the client asked for nothing.
+ */
+export declare function refreshThunks(declaringOp: OperationInfo, targets: InvalidationTarget[]): string[];

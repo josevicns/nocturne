@@ -1,0 +1,14 @@
+import type { Adapter, AdapterArgs, CodePattern, LoaderChoice } from '../adapters.js';
+import { type DeepPartial } from '../config.js';
+import { Transformer } from './transformer.js';
+export { parseScript, scriptParseOptions, scriptParseOptionsWithComments } from './transformer.js';
+export { Transformer };
+export declare const pluralPattern: CodePattern;
+type LoadersAvailable = 'server' | 'vite';
+export type VanillaArgs = AdapterArgs<LoadersAvailable>;
+export declare const defaultArgs: VanillaArgs;
+export declare function getDefaultLoaderPath(loader: LoaderChoice<LoadersAvailable>, bundle: boolean): string | {
+    client: string;
+    server: string;
+} | null;
+export declare const adapter: (args?: DeepPartial<VanillaArgs>) => Adapter;

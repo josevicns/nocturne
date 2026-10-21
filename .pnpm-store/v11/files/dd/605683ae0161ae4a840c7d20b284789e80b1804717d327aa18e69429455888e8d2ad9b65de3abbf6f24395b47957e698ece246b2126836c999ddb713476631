@@ -1,0 +1,7 @@
+interface Props {
+    selected: string | null;
+    apiBase?: string;
+}
+declare const LanguageList: import("svelte").Component<Props, {}, "selected">;
+type LanguageList = ReturnType<typeof LanguageList>;
+export default LanguageList;

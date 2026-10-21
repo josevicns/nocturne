@@ -1,0 +1,12 @@
+// @resend/chat-sdk-adapter
+export { ResendAdapter } from "./adapter.js";
+import { ResendAdapter } from "./adapter.js";
+/**
+ * Create a new Resend adapter instance.
+ * Reads config + env vars (RESEND_API_KEY, RESEND_WEBHOOK_SECRET).
+ */
+export function createResendAdapter(config) {
+    const adapter = new ResendAdapter(config);
+    return adapter;
+}
+//# sourceMappingURL=index.js.map

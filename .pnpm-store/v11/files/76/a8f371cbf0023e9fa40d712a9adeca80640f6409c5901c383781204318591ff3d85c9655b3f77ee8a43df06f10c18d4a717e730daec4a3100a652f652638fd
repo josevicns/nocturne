@@ -1,0 +1,76 @@
+{
+  "name": "@resend/chat-sdk-adapter",
+  "version": "0.2.2",
+  "description": "Vercel Chat SDK adapter for Resend email",
+  "author": "João Melo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/resend/resend-chat-sdk.git"
+  },
+  "homepage": "https://github.com/resend/resend-chat-sdk",
+  "bugs": {
+    "url": "https://github.com/resend/resend-chat-sdk/issues"
+  },
+  "keywords": [
+    "resend",
+    "email",
+    "chat",
+    "adapter",
+    "vercel",
+    "chat-sdk",
+    "webhook"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "@chat-adapter/shared": "^4.15.0",
+    "chat": "^4.15.0"
+  },
+  "dependencies": {
+    "hast-util-to-html": "^9.0.5",
+    "mdast-util-to-hast": "^13.2.1",
+    "react-email": "^6.0.0",
+    "resend": "6.9.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
+    "@changesets/cli": "2.29.8",
+    "@changesets/pre": "2.0.2",
+    "@chat-adapter/shared": "4.20.0",
+    "@types/mdast": "^4.0.4",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.14",
+    "chat": "4.20.0",
+    "react": "^19.2.4",
+    "typescript": "^5.7.0",
+    "ultracite": "^7.2.4",
+    "vitest": "^3.0.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "canary:enter": "changeset pre enter canary",
+    "canary:exit": "changeset pre exit",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish"
+  }
+}

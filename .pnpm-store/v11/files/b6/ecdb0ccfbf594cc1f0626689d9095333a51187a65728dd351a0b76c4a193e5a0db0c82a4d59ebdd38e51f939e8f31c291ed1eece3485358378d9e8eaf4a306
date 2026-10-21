@@ -1,0 +1,67 @@
+import { Logger, StateAdapter, Lock, QueueEntry } from 'chat';
+import pg from 'pg';
+
+interface PostgresStateAdapterUrlOptions {
+    client?: never;
+    /** Key prefix for all rows (default: "chat-sdk") */
+    keyPrefix?: string;
+    /** Logger instance for error reporting */
+    logger?: Logger;
+    /** Postgres connection URL. Defaults to POSTGRES_URL or DATABASE_URL env var. */
+    url?: string;
+}
+interface PostgresStateAdapterClientOptions {
+    /** Existing pg.Pool instance */
+    client: pg.Pool;
+    /** Key prefix for all rows (default: "chat-sdk") */
+    keyPrefix?: string;
+    /** Logger instance for error reporting */
+    logger?: Logger;
+}
+type PostgresStateAdapterOptions = PostgresStateAdapterUrlOptions | PostgresStateAdapterClientOptions;
+/**
+ * @deprecated Use `PostgresStateAdapterClientOptions`. Renamed for consistency
+ * with the rest of the state adapter packages.
+ */
+type PostgresStateClientOptions = PostgresStateAdapterClientOptions;
+/**
+ * @deprecated Use `PostgresStateAdapterOptions`. Renamed for consistency with
+ * the rest of the state adapter packages.
+ */
+type CreatePostgresStateOptions = PostgresStateAdapterOptions;
+declare class PostgresStateAdapter implements StateAdapter {
+    private readonly pool;
+    private readonly keyPrefix;
+    private readonly logger;
+    private readonly ownsClient;
+    private connected;
+    private connectPromise;
+    constructor(options: PostgresStateAdapterOptions);
+    connect(): Promise<void>;
+    disconnect(): Promise<void>;
+    subscribe(threadId: string): Promise<void>;
+    unsubscribe(threadId: string): Promise<void>;
+    isSubscribed(threadId: string): Promise<boolean>;
+    acquireLock(threadId: string, ttlMs: number): Promise<Lock | null>;
+    forceReleaseLock(threadId: string): Promise<void>;
+    releaseLock(lock: Lock): Promise<void>;
+    extendLock(lock: Lock, ttlMs: number): Promise<boolean>;
+    get<T = unknown>(key: string): Promise<T | null>;
+    set<T = unknown>(key: string, value: T, ttlMs?: number): Promise<void>;
+    setIfNotExists(key: string, value: unknown, ttlMs?: number): Promise<boolean>;
+    delete(key: string): Promise<void>;
+    appendToList(key: string, value: unknown, options?: {
+        maxLength?: number;
+        ttlMs?: number;
+    }): Promise<void>;
+    getList<T = unknown>(key: string): Promise<T[]>;
+    enqueue(threadId: string, entry: QueueEntry, maxSize: number): Promise<number>;
+    dequeue(threadId: string): Promise<QueueEntry | null>;
+    queueDepth(threadId: string): Promise<number>;
+    getClient(): pg.Pool;
+    private ensureSchema;
+    private ensureConnected;
+}
+declare function createPostgresState(options?: PostgresStateAdapterOptions): PostgresStateAdapter;
+
+export { type CreatePostgresStateOptions, PostgresStateAdapter, type PostgresStateAdapterClientOptions, type PostgresStateAdapterOptions, type PostgresStateAdapterUrlOptions, type PostgresStateClientOptions, createPostgresState };

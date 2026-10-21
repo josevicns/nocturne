@@ -1,0 +1,70 @@
+{
+    "name": "@wuchale/svelte",
+    "version": "0.20.7",
+    "description": "Protobuf-like i18n from plain code: Svelte adapter",
+    "scripts": {
+        "dev": "tsc --watch",
+        "build": "tsc",
+        "test": "node --import ../wuchale/testing/resolve.ts --test"
+    },
+    "keywords": [
+        "i18n",
+        "internationalization",
+        "translation",
+        "gettext",
+        "svelte",
+        "sveltekit",
+        "vite",
+        "po",
+        "svelte-i18n",
+        "vite-plugin",
+        "compile-time",
+        "ast",
+        "gemini",
+        "translation-tooling",
+        "multilingual",
+        "localization",
+        "l10n",
+        "lingui",
+        "automatic-i18n",
+        "lightweight",
+        "svelte-plugin"
+    ],
+    "files": [
+        "dist",
+        "src/loaders",
+        "src/runtime.*"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./runtime.svelte": {
+            "types": "./src/runtime.svelte.d.ts",
+            "svelte": "./src/runtime.svelte",
+            "default": "./src/runtime.svelte"
+        }
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/wuchalejs/wuchale.git"
+    },
+    "homepage": "https://wuchale.dev",
+    "bugs": "https://github.com/wuchalejs/wuchale/issues",
+    "author": "K1DV5",
+    "license": "MIT",
+    "peerDependencies": {
+        "svelte": "^5"
+    },
+    "dependencies": {
+        "wuchale": "^0.25.8"
+    },
+    "devDependencies": {
+        "@types/node": "~24.13.2",
+        "svelte": "^5.56.3",
+        "acorn": "^8.17.0",
+        "typescript": "^6.0.3"
+    },
+    "type": "module"
+}

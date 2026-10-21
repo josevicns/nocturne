@@ -1,0 +1,61 @@
+let onInvalidFunc = () => '';
+// @ts-expect-error
+if (import.meta.env?.DEV) {
+    onInvalidFunc = (i, c) => {
+        const item = c[i];
+        if (item == null) {
+            return `[i18n-404:${i}]`;
+        }
+        return `[i18n-400:${i}(${item})]`;
+    };
+}
+export function onInvalid(newOnInvalid) {
+    onInvalidFunc = newOnInvalid;
+}
+/** get translation using composite context */
+function mixedToString(ctx, args = [], start = 1) {
+    let msgStr = '';
+    for (let i = start; i < ctx.length; i++) {
+        const fragment = ctx[i];
+        if (typeof fragment === 'string') {
+            msgStr += fragment;
+        }
+        else {
+            // index of non-text children
+            msgStr += args[fragment];
+        }
+    }
+    return msgStr;
+}
+export default function toRuntime(mod = { c: [] }, locale) {
+    const getCompositeContext = (id) => {
+        const ctx = mod.c[id];
+        if (typeof ctx === 'string') {
+            return [ctx];
+        }
+        if (Array.isArray(ctx)) {
+            return ctx;
+        }
+        return [onInvalidFunc(id, mod.c)];
+    };
+    const rt = (id, args = []) => mixedToString(getCompositeContext(id), args, 0);
+    rt._ = mod;
+    rt.l = locale;
+    rt.c = getCompositeContext;
+    rt.x = mixedToString;
+    rt.t = (tag, id, args) => {
+        const strings = [''];
+        const exprs = [];
+        for (const x of getCompositeContext(id)) {
+            if (typeof x === 'string') {
+                strings[strings.length - 1] += x;
+                continue;
+            }
+            exprs.push(args?.[x]);
+            strings.push('');
+        }
+        return tag(Object.assign(strings, { raw: strings }), ...exprs);
+    };
+    rt.p = (id) => mod.c[id] ?? [];
+    return rt;
+}

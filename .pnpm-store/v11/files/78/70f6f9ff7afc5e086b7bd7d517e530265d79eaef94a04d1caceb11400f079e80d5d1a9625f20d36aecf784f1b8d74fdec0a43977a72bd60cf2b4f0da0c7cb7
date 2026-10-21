@@ -1,0 +1,7 @@
+import type { XSchema } from '../types/schema.mjs';
+import type { XStaticSchema } from './schema.mjs';
+import type { XStaticElements } from './~elements.mjs';
+type TFromSized<Stack extends string[], Root extends XSchema, Schema extends XSchema, Items extends XSchema[]> = (XStaticElements<Stack, Root, Schema, Items>);
+type TFromUnsized<Stack extends string[], Root extends XSchema, Schema extends XSchema> = (XStaticSchema<Stack, Root, Schema>[]);
+export type XStaticItems<Stack extends string[], Root extends XSchema, Schema extends XSchema, Items extends XSchema[] | XSchema, Result extends unknown = (Items extends XSchema[] ? TFromSized<Stack, Root, Schema, [...Items]> : Items extends XSchema ? TFromUnsized<Stack, Root, Items> : never)> = Result;
+export {};

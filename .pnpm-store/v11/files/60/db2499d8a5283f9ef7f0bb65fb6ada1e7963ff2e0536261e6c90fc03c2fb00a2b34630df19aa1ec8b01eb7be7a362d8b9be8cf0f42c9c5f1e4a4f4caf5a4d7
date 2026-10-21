@@ -1,0 +1,66 @@
+import type { FS } from './fs.js';
+export type FileRefEntry = {
+    link?: string | undefined;
+    placeholders: [string, string][];
+};
+export type FileRef = {
+    file: string;
+    /**
+     * multiple references in the same file
+     * null when there is no link or placeholders just that it's referenced
+     */
+    refs: (FileRefEntry | null)[];
+};
+export interface Item {
+    context?: string | undefined;
+    translations: Map<string, string[]>;
+    references: FileRef[];
+    urlAdapters: string[];
+    [key: string]: unknown;
+}
+export declare function fillTranslations(item: Item, locales: string[]): void;
+export declare const newItem: (init: Partial<Item> | undefined, locales: string[]) => Item;
+export declare const itemIsUrl: (item: Item) => boolean;
+export declare const itemIsObsolete: (item: Item) => boolean;
+export type PluralRule = {
+    nplurals: number;
+    plural: string;
+};
+export type PluralRules = Map<string, PluralRule>;
+export declare const defaultPluralRule: PluralRule;
+export type SaveData = {
+    pluralRules: PluralRules;
+    items: Item[];
+};
+export type LoadData = {
+    pluralRules?: PluralRules | undefined;
+    items: Item[];
+};
+export type CatalogStorage = {
+    /**
+     * the key to check if two storages share the same location
+     * e.g. this can be the dir for the pofile storage
+     * two storages with same keys means they are the same/shared
+     */
+    key: string;
+    load(): LoadData | Promise<LoadData>;
+    save(data: SaveData): void | Promise<void>;
+    /** the files controlled by this storage, for e.g. for Vite to watch */
+    files: string[];
+};
+export type Catalog = Map<string, Item>;
+export type StorageFactoryOpts = {
+    locales: string[];
+    root: string;
+    /** shared locale artifacts directory from the top-level config */
+    localesDir: string;
+    sourceLocale: string;
+    fs: FS;
+};
+export type StorageFactory = (opts: StorageFactoryOpts) => CatalogStorage | Promise<CatalogStorage>;
+export declare function migrateStorage(fromStorages: StorageFactory[], toStorage: StorageFactory): StorageFactory;
+type ItemType = 'message' | 'url';
+export declare function storageByType(storages: Record<ItemType, StorageFactory>): StorageFactory;
+export declare function mergeItemsByKey(allItems: Item[][], sourceLocale: string): Item[];
+export declare function storageByLocale(storages: [string[], StorageFactory][]): StorageFactory;
+export {};

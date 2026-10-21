@@ -1,0 +1,10 @@
+import { type TSchema, type TSchemaOptions } from '../../types/schema.mjs';
+import { type TUnion } from '../../types/union.mjs';
+import { type TProperties } from '../../types/properties.mjs';
+import { type TExtends, ExtendsResult } from '../../extends/index.mjs';
+import { type TState, type TInstantiateType, type TCanInstantiate } from '../instantiate.mjs';
+import { type TConditionalDeferred } from '../../action/conditional.mjs';
+type TConditionalImmediate<Context extends TProperties, State extends TState, Left extends TSchema, Right extends TSchema, True extends TSchema, False extends TSchema, InstaniatedLeft extends TSchema = TInstantiateType<Context, State, Left>, InstaniatedRight extends TSchema = TInstantiateType<Context, State, Right>, ExtendsResult extends ExtendsResult.TResult = TExtends<Context, InstaniatedLeft, InstaniatedRight>> = (ExtendsResult extends ExtendsResult.TExtendsUnion<infer InferredContext extends TProperties> ? TUnion<[TInstantiateType<InferredContext, State, True>, TInstantiateType<Context, State, False>]> : ExtendsResult extends ExtendsResult.TExtendsTrue<infer InferredContext extends TProperties> ? TInstantiateType<InferredContext, State, True> : TInstantiateType<Context, State, False>);
+export type TConditionalInstantiate<Context extends TProperties, State extends TState, Left extends TSchema, Right extends TSchema, True extends TSchema, False extends TSchema> = TCanInstantiate<Context, [Left, Right]> extends true ? TConditionalImmediate<Context, State, Left, Right, True, False> : TConditionalDeferred<Left, Right, True, False>;
+export declare function ConditionalInstantiate<Context extends TProperties, State extends TState, Left extends TSchema, Right extends TSchema, True extends TSchema, False extends TSchema>(context: Context, state: State, left: Left, right: Right, true_: True, false_: False, options: TSchemaOptions): TConditionalInstantiate<Context, State, Left, Right, True, False>;
+export {};

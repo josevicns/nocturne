@@ -1,0 +1,49 @@
+import type { AnyNode, VariableDeclarator } from 'acorn';
+import { type AST } from 'svelte/compiler';
+import type { CodePattern, HeuristicFunc, Message, RuntimeConf, TransformCtx, TransformOutput } from 'wuchale';
+import { MixedVisitor } from 'wuchale/adapter-utils';
+import { Transformer } from 'wuchale/adapter-vanilla';
+type MixedNodesTypes = AST.Text | AST.Tag | AST.ElementLike | AST.SvelteElement | AST.Block | AST.Comment;
+type MixedVisitorSvelte = MixedVisitor<MixedNodesTypes, AST.Text, AST.Comment, AST.ExpressionTag>;
+export type RuntimeCtxSv = {
+    module: boolean;
+};
+export declare class SvelteTransformer extends Transformer {
+    currentElement?: string | undefined;
+    currentSnippet: number;
+    moduleExportExprs: AnyNode[];
+    mixedVisitor: MixedVisitorSvelte;
+    constructor(ctx: TransformCtx, heuristic: HeuristicFunc, patterns: CodePattern[], rtConf: RuntimeConf);
+    visitExpressionTag(node: AST.ExpressionTag): Message[];
+    visitVariableDeclarator(node: VariableDeclarator): Message[];
+    initMixedVisitor(): MixedVisitorSvelte;
+    visitFragment(node: AST.Fragment, nestable?: boolean): Message[];
+    visitRegularElement(node: AST.ElementLike): Message[];
+    visitComponent(node: AST.Component): Message[];
+    visitSpreadAttribute(node: AST.SpreadAttribute): Message[];
+    visitAttribute(node: AST.Attribute): Message[];
+    visitConstTag(node: AST.ConstTag): Message[];
+    visitDeclarationTag(node: AST.DeclarationTag): Message[];
+    visitRenderTag(node: AST.RenderTag): Message[];
+    visitHtmlTag(node: AST.HtmlTag): Message[];
+    visitOnDirective(node: AST.OnDirective): Message[];
+    hasIdentifier(node: AnyNode | AnyNode[], name: string): boolean;
+    visitSnippetBlock(node: AST.SnippetBlock): Message[];
+    visitIfBlock(node: AST.IfBlock): Message[];
+    visitEachBlock(node: AST.EachBlock): Message[];
+    visitKeyBlock(node: AST.KeyBlock): Message[];
+    visitAwaitBlock(node: AST.AwaitBlock): Message[];
+    visitSvelteBody(node: AST.SvelteBody): Message[];
+    visitSvelteDocument(node: AST.SvelteDocument): Message[];
+    visitSvelteElement(node: AST.SvelteElement): Message[];
+    visitSvelteBoundary(node: AST.SvelteBoundary): Message[];
+    visitSvelteHead(node: AST.SvelteHead): Message[];
+    visitTitleElement(node: AST.TitleElement): Message[];
+    visitSvelteWindow(node: AST.SvelteWindow): Message[];
+    visitRoot(node: AST.Root): Message[];
+    visitSv(node: AST.SvelteNode | AnyNode): Message[];
+    /** collects the ranges that will be checked if a snippet identifier is exported using RegExp test to simplify */
+    collectModuleExportExprs(script: AST.Script): void;
+    transformSv(): Promise<TransformOutput>;
+}
+export {};

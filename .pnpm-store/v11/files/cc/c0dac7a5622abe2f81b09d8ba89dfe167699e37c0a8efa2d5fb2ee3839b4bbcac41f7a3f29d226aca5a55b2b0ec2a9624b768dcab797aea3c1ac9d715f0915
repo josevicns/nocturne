@@ -1,0 +1,86 @@
+export default class {
+    visitEmptyStatement() {
+        return [];
+    }
+    visitArrayPattern() {
+        return [];
+    }
+    visitBreakStatement() {
+        return [];
+    }
+    visitCatchClause() {
+        return [];
+    }
+    visitClassBody() {
+        return [];
+    }
+    visitClassExpression() {
+        return [];
+    }
+    visitContinueStatement() {
+        return [];
+    }
+    visitDebuggerStatement() {
+        return [];
+    }
+    visitExportAllDeclaration() {
+        return [];
+    }
+    visitExportSpecifier() {
+        return [];
+    }
+    visitIdentifier() {
+        return [];
+    }
+    visitImportAttribute() {
+        return [];
+    }
+    visitImportDeclaration() {
+        return [];
+    }
+    visitImportDefaultSpecifier() {
+        return [];
+    }
+    visitImportExpression() {
+        return [];
+    }
+    visitImportNamespaceSpecifier() {
+        return [];
+    }
+    visitImportSpecifier() {
+        return [];
+    }
+    visitMetaProperty() {
+        return [];
+    }
+    visitMethodDefinition() {
+        return [];
+    } // handled inside visitClassDeclaration
+    visitPrivateIdentifier() {
+        return [];
+    }
+    visitPropertyDefinition() {
+        return [];
+    }
+    visitStaticBlock() {
+        return [];
+    } // handled inside visitClassDeclaration
+    visitSuper() {
+        return [];
+    }
+    visitTemplateElement() {
+        return [];
+    }
+    visitThisExpression() {
+        return [];
+    }
+    visitThrowStatement() {
+        return [];
+    }
+    visitUpdateExpression() {
+        return [];
+    }
+    visitWithStatement() {
+        return [];
+    }
+}

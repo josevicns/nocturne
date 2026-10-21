@@ -1,0 +1,149 @@
+import type { StorageFactory } from './storage.js';
+type TxtScope = 'script' | 'markup' | 'attribute';
+export type HeuristicDetailsBase = {
+    scope: TxtScope;
+    element?: string | undefined;
+    attribute?: string | undefined;
+};
+export type ScriptDeclType = 'variable' | 'function' | 'class' | 'expression';
+export type HeuristicDetails = HeuristicDetailsBase & {
+    file: string;
+    /** the type of the top level declaration */
+    declaring?: ScriptDeclType | undefined;
+    /** in assignments, whether the string is on the left side as destructuring default */
+    leftSide?: boolean | undefined;
+    /** the name of the function being defined, '' for arrow or null for global */
+    funcName?: string | null | undefined;
+    /** whether the function being defined is nested inside another, null for no function */
+    funcIsNested?: boolean | undefined;
+    /** whether inside a script file/<script> instead of an expression inside markup */
+    insideProgram: boolean;
+    /** the name of the call at the top level */
+    topLevelCall?: string | undefined;
+    /** the name of the nearest call (for arguments) */
+    call?: string | undefined;
+    /** inside an export const ... etc */
+    exported?: boolean | undefined;
+    /** object property path */
+    property?: string | undefined;
+};
+export type MessageType = 'message' | 'url';
+export type Message = {
+    msgStr: string[];
+    context?: string | undefined;
+    placeholders: [string, string][];
+    details: HeuristicDetails;
+    type: MessageType;
+};
+export declare function newMessage(init: Partial<Message>): Message;
+export declare const getKey: (text: string[], context?: string) => string;
+export type HeuristicResultChecked = MessageType | false;
+export type HeuristicResult = HeuristicResultChecked | null | undefined;
+export type HeuristicFunc = (msg: Message) => HeuristicResult;
+export declare const defaultHeuristicOpts: {
+    ignoreElements: string[];
+    ignoreAttribs: string[][];
+    ignoreCalls: string[];
+    urlAttribs: string[][];
+    urlCalls: string[];
+    urlProps: string[];
+};
+export type CreateHeuristicOpts = typeof defaultHeuristicOpts;
+export declare function createHeuristic(opts: CreateHeuristicOpts): HeuristicFunc;
+/** Default heuristic */
+export declare const defaultHeuristic: HeuristicFunc;
+/** Default heuristic which ignores messages outside functions in the `script` scope */
+export declare const defaultHeuristicFuncOnly: HeuristicFunc;
+export declare class IndexTracker {
+    #private;
+    constructor(bypassHas: boolean);
+    get: (msgStr: string) => number;
+    has: (msgStr: string) => boolean;
+    getAll: () => MapIterator<[string, number]>;
+}
+export type GlobConf = string | string[] | {
+    include: string | string[];
+    ignore: string | string[];
+};
+export type RuntimeExpr = {
+    plain: string;
+    reactive: string;
+};
+export type UrlMatcher = (url: string) => readonly [number, string[]] | null;
+export type TransformCtx = {
+    content: string;
+    filename: string;
+    index: IndexTracker;
+    expr: RuntimeExpr;
+    matchUrl: UrlMatcher;
+};
+export type TransformOutputCode = {
+    code?: string;
+    map?: any;
+};
+export type TransformOutputFunc = (header: string) => TransformOutputCode;
+export type TransformOutput = {
+    output: TransformOutputFunc;
+    msgs: Message[];
+};
+export type TransformFunc = (expr: TransformCtx) => TransformOutput;
+export type TransformFuncAsync = (expr: TransformCtx) => Promise<TransformOutput>;
+export type WrapFunc = (expr: string) => string;
+export type DecideReactiveDetails<RTCtxT = any> = {
+    funcName?: string | undefined;
+    nested: boolean;
+    file: string;
+    ctx: RTCtxT;
+};
+type RuntimeConfDetails = {
+    wrapInit: WrapFunc;
+    wrapUse: WrapFunc;
+};
+export type RuntimeConf = {
+    /** return null to disable */
+    initReactive: (details: DecideReactiveDetails) => boolean | null;
+    useReactive: boolean | ((details: DecideReactiveDetails) => boolean);
+    plain: RuntimeConfDetails;
+    reactive: RuntimeConfDetails;
+};
+export type LoaderPath = {
+    client: string;
+    server: string;
+};
+export type URLConf = {
+    patterns?: string[];
+    localize?: boolean | string;
+};
+export type LoadGroupPatt = string | string[];
+export type AdapterPassThruOpts = {
+    sourceLocale?: string;
+    files: GlobConf;
+    storage: StorageFactory;
+    loading: {
+        direct: boolean;
+        granular: boolean;
+        group: LoadGroupPatt[];
+    };
+    url?: URLConf;
+    runtime: RuntimeConf;
+};
+export type Adapter = AdapterPassThruOpts & {
+    transform: TransformFunc | TransformFuncAsync;
+    /** possible filename extensions for loader. E.g. `.js` */
+    loaderExts: [string, ...string[]];
+    /** default loaders to copy, `null` means custom */
+    defaultLoaderPath: LoaderPath | string | null;
+    /** names to import from loaders, should avoid collision with code variables */
+    getRuntimeVars?: Partial<RuntimeExpr>;
+};
+export type CodePattern = {
+    name: string;
+    args: ('message' | 'pluralFunc' | 'locale' | 'other')[];
+};
+export type LoaderChoice<LoadersAvailable> = LoadersAvailable | (string & {}) | 'custom';
+export type AdapterArgs<LoadersAvailable> = AdapterPassThruOpts & {
+    loader: LoaderChoice<LoadersAvailable>;
+    heuristic: HeuristicFunc;
+    patterns: CodePattern[];
+};
+export {};

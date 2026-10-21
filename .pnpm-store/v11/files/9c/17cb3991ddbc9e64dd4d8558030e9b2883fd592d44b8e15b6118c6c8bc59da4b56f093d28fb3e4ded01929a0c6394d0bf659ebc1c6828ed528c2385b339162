@@ -1,0 +1,28 @@
+declare const colors: {
+    red: number;
+    green: number;
+    yellow: number;
+    magenta: number;
+    cyan: number;
+    grey: number;
+    reset: number;
+};
+type ColorFuncs = Record<keyof typeof colors, (msg: string | number) => string>;
+export declare const color: ColorFuncs;
+export declare const logLevels: {
+    error: number;
+    warn: number;
+    info: number;
+    verbose: number;
+};
+export type LogLevel = keyof typeof logLevels;
+export declare class Logger {
+    #private;
+    constructor(logLevelName: LogLevel);
+    checkLevel: (level: LogLevel) => boolean;
+    info: (msg: string) => void;
+    warn: (msg: string) => void;
+    error: (msg: string) => void;
+    verbose: (msg: string) => void;
+}
+export {};

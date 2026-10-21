@@ -1,0 +1,178 @@
+import { line as d3Line, lineRadial } from 'd3-shape';
+import { geoPath as d3GeoPath } from 'd3-geo';
+import { max } from 'd3-array';
+import { interpolatePath } from 'd3-interpolate-path';
+import { accessor } from '../../utils/common.js';
+import { isScaleBand } from '../../utils/scales.svelte.js';
+import { createMotion, extractTweenConfig } from '../../utils/motion.svelte.js';
+import { resolveColorProp, resolveStyleProp } from '../../utils/dataProp.js';
+import { getChartContext } from '../../contexts/chart.js';
+import { getGeoContext } from '../../contexts/geo.js';
+/**
+ * Reactive state shared by every per-layer Spline variant. Holds the
+ * computed `d` (path data), `segments` (per-style-grouped paths when
+ * stroke/fill/opacity are functions), and tween state.
+ */
+export class SplineState {
+    #getProps = () => ({});
+    /**
+     * Memoized props — the component's props closure allocates a fresh object
+     * (it spreads `rest`), so calling it once per derived meant one allocation
+     * per derived per update. Read it once here instead.
+     */
+    #props = $derived(this.#getProps());
+    ctx = getChartContext();
+    geo = getGeoContext();
+    #tweenState;
+    constructor(getProps) {
+        this.#getProps = getProps;
+        const initial = getProps();
+        this.ctx.registerComponent({
+            name: 'Spline',
+            kind: 'mark',
+            markInfo: () => {
+                const p = this.#props;
+                return {
+                    data: p.data,
+                    x: p.x,
+                    y: p.y,
+                    seriesKey: p.seriesKey,
+                    color: typeof p.stroke === 'string' ? p.stroke : undefined,
+                };
+            },
+        });
+        // Only build the tween when `motion` asks for one. `Spline.base` renders
+        // `c.d` unless `isTweened`, so an unconditional tween re-interpolated the
+        // full path on every data change and threw the result away — the dominant
+        // cost in streaming charts.
+        const tween = extractTweenConfig(this.#props.motion);
+        this.#tweenState = createMotion(this.#defaultPathData(), () => this.d, tween ? { type: 'tween', interpolate: interpolatePath, ...tween.options } : undefined);
+    }
+    #getScaleValue(data, scale, accessorFn) {
+        let value = accessorFn(data);
+        if (Array.isArray(value))
+            value = max(value);
+        if (scale.domain().length)
+            return scale(value);
+        return value;
+    }
+    series = $derived(this.ctx.series.series.find((s) => s.key === this.#props.seriesKey));
+    seriesAccessor = $derived(this.series?.value ?? (this.series?.data ? undefined : this.series?.key));
+    xAccessor = $derived(accessor(this.#props.x ?? (this.ctx.valueAxis === 'x' ? this.seriesAccessor : undefined) ?? this.ctx.x));
+    yAccessor = $derived(accessor(this.#props.y ?? (this.ctx.valueAxis === 'y' ? this.seriesAccessor : undefined) ?? this.ctx.y));
+    xOffset = $derived(isScaleBand(this.ctx.xScale) ? this.ctx.xScale.bandwidth() / 2 : 0);
+    yOffset = $derived(isScaleBand(this.ctx.yScale) ? this.ctx.yScale.bandwidth() / 2 : 0);
+    #buildPath(resolvedData) {
+        const props = this.#props;
+        const path = this.ctx.radial
+            ? lineRadial()
+                .angle((d) => this.#getScaleValue(d, this.ctx.xScale, this.xAccessor) + 0)
+                .radius((d) => this.#getScaleValue(d, this.ctx.yScale, this.yAccessor) + this.yOffset)
+            : d3Line()
+                .x((d) => this.#getScaleValue(d, this.ctx.xScale, this.xAccessor) + this.xOffset)
+                .y((d) => this.#getScaleValue(d, this.ctx.yScale, this.yAccessor) + this.yOffset);
+        path.defined(props.defined ?? ((d) => this.xAccessor(d) != null && this.yAccessor(d) != null));
+        if (props.curve)
+            path.curve(props.curve);
+        return path(resolvedData) ?? '';
+    }
+    hasAnyStyleFn = $derived.by(() => {
+        const p = this.#props;
+        return (typeof p.stroke === 'function' ||
+            typeof p.fill === 'function' ||
+            typeof p.opacity === 'function');
+    });
+    d = $derived.by(() => {
+        const props = this.#props;
+        if (this.hasAnyStyleFn && !this.geo.projection)
+            return '';
+        const resolvedData = props.data ?? this.series?.data ?? this.ctx.data;
+        if (this.geo.projection) {
+            const coordinates = resolvedData
+                .filter((d) => {
+                if (props.defined)
+                    return props.defined(d, 0, resolvedData);
+                return this.xAccessor(d) != null && this.yAccessor(d) != null;
+            })
+                .map((d) => [this.xAccessor(d), this.yAccessor(d)]);
+            const lineString = { type: 'LineString', coordinates };
+            return d3GeoPath(this.geo.projection)(lineString) ?? '';
+        }
+        return this.#buildPath(resolvedData);
+    });
+    segments = $derived.by(() => {
+        if (!this.hasAnyStyleFn)
+            return null;
+        const props = this.#props;
+        const resolvedData = props.data ?? this.series?.data ?? this.ctx.data;
+        if (this.geo.projection)
+            return null;
+        const groups = groupConsecutive(resolvedData, (d, i, arr) => {
+            const s = resolveColorProp(props.stroke, d, this.ctx.cScale, i, arr);
+            const f = resolveColorProp(props.fill, d, this.ctx.cScale, i, arr);
+            const o = resolveStyleProp(props.opacity, d, i, arr);
+            return { key: `${s}\0${f}\0${o}`, style: { stroke: s, fill: f, opacity: o } };
+        });
+        return groups.map((group) => ({
+            ...group.style,
+            d: this.#buildPath(group.data),
+        }));
+    });
+    #defaultPathData() {
+        const props = this.#props;
+        if (!extractTweenConfig(props.motion))
+            return '';
+        if (this.ctx.config.x) {
+            const resolvedData = props.data ?? this.series?.data ?? this.ctx.data;
+            const baseline = Math.min(this.ctx.yScale(0) ?? this.ctx.yRange[0], this.ctx.yRange[0]);
+            const path = this.ctx.radial
+                ? lineRadial()
+                    .angle((d) => this.#getScaleValue(d, this.ctx.xScale, this.xAccessor) + 0)
+                    .radius(() => baseline)
+                : d3Line()
+                    .x((d) => this.#getScaleValue(d, this.ctx.xScale, this.xAccessor) + this.xOffset)
+                    .y(() => baseline);
+            path.defined(props.defined ?? ((d) => this.xAccessor(d) != null && this.yAccessor(d) != null));
+            if (props.curve)
+                path.curve(props.curve);
+            return path(resolvedData) ?? '';
+        }
+        return '';
+    }
+    isTweened = $derived(extractTweenConfig(this.#props.motion) != null);
+    get tweenedPath() {
+        return this.#tweenState.current;
+    }
+    seriesOpacity = $derived.by(() => {
+        if (this.series?.key == null ||
+            this.ctx.series.visibleSeries.length <= 1 ||
+            this.ctx.series.isHighlighted(this.series.key, true)) {
+            return 1;
+        }
+        return 0.1;
+    });
+}
+/**
+ * Groups consecutive data points by a composite key derived from function-valued style props.
+ * The key at index `i` determines the style for the segment from point `i` to point `i+1`.
+ * Each group includes an overlap of 1 point at boundaries for curve continuity.
+ */
+function groupConsecutive(data, keyFn) {
+    if (data.length < 2)
+        return [];
+    const groups = [];
+    let current = keyFn(data[0], 0, data);
+    let startIdx = 0;
+    for (let i = 1; i < data.length; i++) {
+        const next = keyFn(data[i], i, data);
+        if (next.key !== current.key) {
+            groups.push({ style: current.style, data: data.slice(startIdx, i + 1) });
+            startIdx = i;
+            current = next;
+        }
+    }
+    if (data.length - startIdx >= 2) {
+        groups.push({ style: current.style, data: data.slice(startIdx) });
+    }
+    return groups;
+}

@@ -1,0 +1,44 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import React from "react";
+import { Body, Button, Container, Heading, Hr, Html, Img, Link, render, Section, Text, } from "react-email";
+function renderChildren(children) {
+    if (!children || children.length === 0) {
+        return null;
+    }
+    return children.map((child, i) => (
+    // biome-ignore lint/suspicious/noArrayIndexKey: static card tree, no reordering
+    _jsx(React.Fragment, { children: renderNode(child) }, i)));
+}
+function renderNode(node) {
+    switch (node.type) {
+        case "card":
+            return (_jsxs(Section, { children: [node.title && _jsx(Heading, { as: "h2", children: node.title }), node.subtitle && (_jsx(Text, { style: { color: "#666", marginTop: 0 }, children: node.subtitle })), node.imageUrl && _jsx(Img, { alt: node.title || "", src: node.imageUrl }), renderChildren(node.children)] }));
+        case "text":
+            return _jsx(Text, { children: node.content || "" });
+        case "divider":
+            return _jsx(Hr, {});
+        case "image":
+            return (_jsx(Img, { alt: node.label || "", src: node.url || "", width: node.props?.width }));
+        case "actions":
+            return _jsx(Section, { children: renderChildren(node.children) });
+        case "link-button":
+            return _jsx(Button, { href: node.url || "#", children: node.label || "" });
+        case "button":
+            return _jsx(Button, { href: node.url || "#", children: node.label || "" });
+        case "link":
+            return _jsx(Link, { href: node.url || "#", children: node.label || "" });
+        case "section":
+            return _jsx(Section, { children: renderChildren(node.children) });
+        case "field":
+            return (_jsxs(Text, { children: [_jsx("strong", { children: node.label || "" }), ": ", node.value || ""] }));
+        case "fields":
+            return _jsx(Section, { children: renderChildren(node.children) });
+        default:
+            return _jsx(Text, { children: node.content || node.label || "" });
+    }
+}
+export async function renderCard(card) {
+    const emailComponent = (_jsx(Html, { children: _jsx(Body, { children: _jsx(Container, { children: renderNode(card) }) }) }));
+    return await render(emailComponent);
+}
+//# sourceMappingURL=card-renderer.js.map

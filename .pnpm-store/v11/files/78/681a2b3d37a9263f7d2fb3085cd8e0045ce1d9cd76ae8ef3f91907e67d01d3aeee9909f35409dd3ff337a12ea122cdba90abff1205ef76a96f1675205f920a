@@ -1,0 +1,37 @@
+export declare function toViteError(err: any, adapterKey: string, filename: string): Error;
+export declare function trimViteQueries(id: string, trimParams: Set<string>): string;
+type HotUpdateCtx = {
+    file: string;
+    server: {
+        ws: {
+            send: (...a: any[]) => any;
+        };
+        moduleGraph: {
+            getModulesByFile: (...a: any[]) => any;
+            invalidateModule: (...a: any[]) => any;
+        };
+    };
+    read: () => string | Promise<string>;
+    timestamp: number;
+};
+export type PluginConf = {
+    configPath?: string;
+    hmrDelayThreshold?: number;
+    trimQueryParams?: string[];
+};
+export declare const wuchale: ({ configPath, hmrDelayThreshold, trimQueryParams }?: PluginConf) => {
+    name: string;
+    configResolved(config: {
+        env: {
+            DEV?: boolean;
+        };
+    }): Promise<void>;
+    handleHotUpdate(ctx: HotUpdateCtx): Promise<never[] | undefined>;
+    transform: {
+        order: "pre";
+        handler(code: string, id: string, options?: {
+            ssr?: boolean | undefined;
+        }): Promise<import("../adapters.js").TransformOutputCode>;
+    };
+};
+export {};

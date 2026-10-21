@@ -1,0 +1,51 @@
+import type { Snippet } from 'svelte';
+import { type PieArcDatum } from 'd3-shape';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+export type PiePropsWithoutHTML = {
+    data?: any[];
+    /** Range [min,max] in degrees. See also startAngle/endAngle @default [0, 360] */
+    range?: [number, number] | number[];
+    /** Start angle in radians */
+    startAngle?: number;
+    /** End angle in radians */
+    endAngle?: number;
+    /**
+     * Define innerRadius.
+     *   value >= 1: discrete value
+     *   value >  0: percent of `outerRadius`
+     *   value <  0: offset of `outerRadius`
+     *   default: yRange min
+     */
+    innerRadius?: number;
+    /** Define outerRadius. Defaults to yRange max/2 (ie. chart height / 2) */
+    outerRadius?: number;
+    /** @default 0 */
+    cornerRadius?: number;
+    /** @default 0 */
+    padAngle?: number;
+    /** @default 0 */
+    offset?: number;
+    /** Setup pointer events to show tooltip for related data */
+    tooltip?: boolean;
+    /** Sort function to sort the arcs */
+    sort?: ((a: any, b: any) => number) | null;
+    children?: Snippet<[{
+        arcs: PieArcDatum<any>[];
+    }]>;
+    motion?: MotionProp;
+};
+export type PieProps = PiePropsWithoutHTML;
+/**
+ * Reactive state shared by every per-layer Pie variant. Builds the
+ * d3-pie generator and resolved `arcs` array.
+ */
+export declare class PieState {
+    #private;
+    ctx: ChartState;
+    constructor(getProps: () => PieProps);
+    range: number[];
+    endAngle: number;
+    pie: import("d3-shape").Pie<any, any>;
+    arcs: PieArcDatum<any>[];
+}

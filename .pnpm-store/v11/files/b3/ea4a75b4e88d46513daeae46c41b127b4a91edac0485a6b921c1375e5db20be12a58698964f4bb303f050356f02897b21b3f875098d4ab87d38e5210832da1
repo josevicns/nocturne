@@ -1,0 +1,255 @@
+import { BaseFormatConverter, Root, AdapterPostableMessage, Logger, CardElement, Adapter, ChatInstance, WebhookOptions, RawMessage, StreamChunk, StreamOptions, EmojiValue, FetchOptions, FetchResult, Message, ThreadInfo, ChannelInfo, FormattedContent, Attachment } from 'chat';
+
+declare class MessengerFormatConverter extends BaseFormatConverter {
+    fromAst(ast: Root): string;
+    toAst(text: string): Root;
+    renderPostable(message: AdapterPostableMessage): string;
+}
+
+interface MessengerAdapterConfig {
+    /** Messenger Graph API version. Defaults to a recent stable version. */
+    apiVersion?: string;
+    /** Facebook app secret for webhook signature verification. Defaults to FACEBOOK_APP_SECRET env var. */
+    appSecret?: string;
+    /** Logger instance for error reporting. Defaults to ConsoleLogger. */
+    logger?: Logger;
+    /** Facebook page access token. Defaults to FACEBOOK_PAGE_ACCESS_TOKEN env var. */
+    pageAccessToken?: string;
+    /** Override bot username (optional) */
+    userName?: string;
+    /** Token used to verify webhook subscription. Defaults to FACEBOOK_VERIFY_TOKEN env var. */
+    verifyToken?: string;
+}
+interface MessengerThreadId {
+    recipientId: string;
+}
+interface MessengerSender {
+    id: string;
+}
+interface MessengerRecipient {
+    id: string;
+}
+interface MessengerAttachmentPayload {
+    sticker_id?: number;
+    url?: string;
+}
+interface MessengerAttachment {
+    payload?: MessengerAttachmentPayload;
+    type: "image" | "video" | "audio" | "file" | "fallback" | "location";
+}
+interface MessengerQuickReply {
+    payload: string;
+}
+interface MessengerMessagePayload {
+    attachments?: MessengerAttachment[];
+    is_echo?: boolean;
+    mid: string;
+    quick_reply?: MessengerQuickReply;
+    text?: string;
+}
+interface MessengerDelivery {
+    mids?: string[];
+    watermark: number;
+}
+interface MessengerRead {
+    watermark: number;
+}
+interface MessengerPostback {
+    mid?: string;
+    payload: string;
+    title: string;
+}
+interface MessengerReaction {
+    action: "react" | "unreact";
+    emoji: string;
+    mid: string;
+    reaction: string;
+}
+interface MessengerMessagingEvent {
+    delivery?: MessengerDelivery;
+    message?: MessengerMessagePayload;
+    postback?: MessengerPostback;
+    reaction?: MessengerReaction;
+    read?: MessengerRead;
+    recipient: MessengerRecipient;
+    sender: MessengerSender;
+    timestamp: number;
+}
+interface MessengerWebhookEntry {
+    id: string;
+    messaging: MessengerMessagingEvent[];
+    time: number;
+}
+interface MessengerWebhookPayload {
+    entry: MessengerWebhookEntry[];
+    object: string;
+}
+interface MessengerSendApiResponse {
+    message_id: string;
+    recipient_id: string;
+}
+interface MessengerUserProfile {
+    first_name?: string;
+    id: string;
+    last_name?: string;
+    profile_pic?: string;
+}
+type MessengerRawMessage = MessengerMessagingEvent;
+interface MessengerButton {
+    payload?: string;
+    title: string;
+    type: "postback" | "web_url";
+    url?: string;
+}
+interface MessengerTemplateElement {
+    buttons?: MessengerButton[];
+    image_url?: string;
+    subtitle?: string;
+    title: string;
+}
+interface MessengerGenericTemplatePayload {
+    elements: MessengerTemplateElement[];
+    template_type: "generic";
+}
+interface MessengerButtonTemplatePayload {
+    buttons: MessengerButton[];
+    template_type: "button";
+    text: string;
+}
+type MessengerTemplatePayload = MessengerGenericTemplatePayload | MessengerButtonTemplatePayload;
+
+/**
+ * Convert CardElement to Messenger templates or text fallback.
+ *
+ * Messenger supports two template types for buttons:
+ * - Generic Template: title, subtitle, image, up to 3 buttons
+ * - Button Template: text with up to 3 buttons (no image)
+ *
+ * Cards that exceed constraints fall back to formatted text messages.
+ *
+ * @see https://developers.facebook.com/docs/messenger-platform/send-messages/template/generic/
+ * @see https://developers.facebook.com/docs/messenger-platform/send-messages/buttons/
+ */
+
+/**
+ * Result of converting a CardElement. Either a template payload
+ * (when buttons fit Messenger constraints) or a text fallback.
+ */
+type MessengerCardResult = {
+    payload: MessengerTemplatePayload;
+    type: "template";
+} | {
+    text: string;
+    type: "text";
+};
+/**
+ * Encode an action ID and optional value into a callback data string.
+ * Format: "chat:{json}" where json is { a: actionId, v?: value }
+ */
+declare function encodeMessengerCallbackData(actionId: string, value?: string): string;
+/**
+ * Decode callback data from a Messenger postback.
+ * Returns the actionId and optional value.
+ */
+declare function decodeMessengerCallbackData(data?: string): {
+    actionId: string;
+    value: string | undefined;
+};
+/**
+ * Convert a CardElement to a Messenger message payload.
+ *
+ * If the card has action buttons that fit Messenger's constraints
+ * (max 3 buttons, titles max 20 chars), produces a template message.
+ * Otherwise, produces a text fallback.
+ */
+declare function cardToMessenger(card: CardElement): MessengerCardResult;
+/**
+ * Convert a CardElement to Messenger-formatted plain text.
+ *
+ * Used as fallback when templates can't represent the card.
+ * Messenger doesn't support markdown formatting in regular messages.
+ */
+declare function cardToMessengerText(card: CardElement): string;
+
+declare class MessengerAdapter implements Adapter<MessengerThreadId, MessengerRawMessage> {
+    readonly name = "messenger";
+    protected readonly appSecret: string;
+    protected readonly pageAccessToken: string;
+    protected readonly verifyToken: string;
+    protected readonly apiVersion: string;
+    protected readonly logger: Logger;
+    protected readonly formatConverter: MessengerFormatConverter;
+    private readonly messageCache;
+    private readonly userProfileCache;
+    protected chat: ChatInstance | null;
+    protected _botUserId?: string;
+    protected _userName: string;
+    protected readonly hasExplicitUserName: boolean;
+    get botUserId(): string | undefined;
+    get userName(): string;
+    constructor(config: MessengerAdapterConfig & {
+        appSecret: string;
+        logger: Logger;
+        pageAccessToken: string;
+        verifyToken: string;
+    });
+    initialize(chat: ChatInstance): Promise<void>;
+    handleWebhook(request: Request, options?: WebhookOptions): Promise<Response>;
+    protected handleVerification(request: Request): Response;
+    protected verifySignature(request: Request, body: string): boolean;
+    protected handleIncomingMessage(event: MessengerMessagingEvent, options?: WebhookOptions): void;
+    protected handlePostback(event: MessengerMessagingEvent, options?: WebhookOptions): void;
+    protected handleEcho(event: MessengerMessagingEvent): void;
+    protected handleReaction(event: MessengerMessagingEvent, options?: WebhookOptions): void;
+    postMessage(threadId: string, message: AdapterPostableMessage): Promise<RawMessage<MessengerRawMessage>>;
+    /**
+     * Send a plain text message.
+     */
+    protected sendTextMessage(threadId: string, text: string): Promise<RawMessage<MessengerRawMessage>>;
+    /**
+     * Send a template message (Generic or Button template).
+     */
+    protected sendTemplateMessage(threadId: string, payload: MessengerTemplatePayload): Promise<RawMessage<MessengerRawMessage>>;
+    editMessage(_threadId: string, _messageId: string, _message: AdapterPostableMessage): Promise<RawMessage<MessengerRawMessage>>;
+    /**
+     * Buffer all stream chunks and send as a single message.
+     * Messenger doesn't support message editing, so we can't do incremental updates.
+     */
+    stream(threadId: string, textStream: AsyncIterable<string | StreamChunk>, _options?: StreamOptions): Promise<RawMessage<MessengerRawMessage>>;
+    deleteMessage(_threadId: string, _messageId: string): Promise<void>;
+    addReaction(_threadId: string, _messageId: string, _emoji: EmojiValue | string): Promise<void>;
+    removeReaction(_threadId: string, _messageId: string, _emoji: EmojiValue | string): Promise<void>;
+    startTyping(threadId: string): Promise<void>;
+    fetchMessages(threadId: string, options?: FetchOptions): Promise<FetchResult<MessengerRawMessage>>;
+    fetchMessage(_threadId: string, messageId: string): Promise<Message<MessengerRawMessage> | null>;
+    fetchThread(threadId: string): Promise<ThreadInfo>;
+    fetchChannelInfo(channelId: string): Promise<ChannelInfo>;
+    /**
+     * On Messenger every conversation is a 1:1 DM, so channel === thread.
+     */
+    channelIdFromThreadId(threadId: string): string;
+    openDM(userId: string): Promise<string>;
+    isDM(_threadId: string): boolean;
+    encodeThreadId(platformData: MessengerThreadId): string;
+    decodeThreadId(threadId: string): MessengerThreadId;
+    parseMessage(raw: MessengerRawMessage): Message<MessengerRawMessage>;
+    renderFormatted(content: FormattedContent): string;
+    protected parseMessengerMessage(event: MessengerMessagingEvent, threadId: string): Message<MessengerRawMessage>;
+    protected extractAttachments(event: MessengerMessagingEvent): Attachment[];
+    protected mapAttachmentType(fbType: string): "image" | "video" | "audio" | "file";
+    protected downloadAttachment(url: string): Promise<Buffer>;
+    protected fetchUserProfile(userId: string): Promise<MessengerUserProfile>;
+    protected profileDisplayName(profile: MessengerUserProfile): string;
+    protected resolveThreadId(value: string): MessengerThreadId;
+    protected truncateMessage(text: string): string;
+    protected paginateMessages(messages: Message<MessengerRawMessage>[], options: FetchOptions): FetchResult<MessengerRawMessage>;
+    protected cacheMessage(message: Message<MessengerRawMessage>): void;
+    protected findCachedMessage(messageId: string): Message<MessengerRawMessage> | undefined;
+    protected compareMessages(a: Message<MessengerRawMessage>, b: Message<MessengerRawMessage>): number;
+    protected messageSequence(messageId: string): number;
+    protected graphApiFetch<TResult>(endpoint: string, method: "GET" | "POST", body?: Record<string, unknown>, queryParams?: Record<string, string>): Promise<TResult>;
+    protected throwGraphApiError(endpoint: string, status: number, data: Record<string, unknown>): never;
+}
+declare function createMessengerAdapter(config?: MessengerAdapterConfig): MessengerAdapter;
+
+export { MessengerAdapter, type MessengerAdapterConfig, type MessengerButton, type MessengerCardResult, MessengerFormatConverter, type MessengerMessagingEvent, type MessengerRawMessage, type MessengerReaction, type MessengerSendApiResponse, type MessengerTemplatePayload, type MessengerThreadId, type MessengerUserProfile, type MessengerWebhookPayload, cardToMessenger, cardToMessengerText, createMessengerAdapter, decodeMessengerCallbackData, encodeMessengerCallbackData };

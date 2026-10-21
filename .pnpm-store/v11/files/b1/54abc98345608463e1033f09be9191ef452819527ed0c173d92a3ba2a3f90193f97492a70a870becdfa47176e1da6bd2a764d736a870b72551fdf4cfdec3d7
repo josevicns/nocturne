@@ -1,0 +1,57 @@
+/**
+ * This is the common coordination logic for use in the CLI as well as the bundler plugins
+ */
+import type { LoaderPath } from './adapters.js';
+import type { Config } from './config.js';
+import { type FS } from './fs.js';
+import { AdapterHandler, type Mode } from './handler/index.js';
+export declare const pluginName = "wuchale";
+type ConfigLoader = () => Config | Promise<Config>;
+type FileChangeInfo = {
+    sourceTriggered: boolean;
+    invalidate: Set<string>;
+};
+type LocaleStatDetails = {
+    locale: string;
+    untranslated: number;
+    obsolete: number;
+};
+type TranslStats = {
+    own: true;
+    total: number;
+    url: number;
+    details: LocaleStatDetails[];
+};
+type AdapterStatus = {
+    key: string;
+    loaders?: LoaderPath;
+    storage: {
+        own: false;
+        ownerKey: string;
+    } | TranslStats;
+};
+export type CheckErrorType = 'notEquivalent' | 'unequalLength';
+type CheckErrorItem = {
+    adapter: string;
+    source: string[];
+    locale: string;
+    translation: string[];
+    type: CheckErrorType;
+};
+type CheckResult = {
+    checked: number;
+    errors: CheckErrorItem[];
+    syncs: string[];
+};
+type TransformErrFormatter = (e: Error, adapterKey: string, filename: string) => Error;
+export declare class Hub {
+    #private;
+    private constructor();
+    static create: (mode: Mode, loadConfig: ConfigLoader, root: string, modifyAdapters?: string[], hmrDelayThreshold?: number, fs?: FS, formatTransformErr?: TransformErrFormatter) => Promise<Hub>;
+    onFileChange: (file: string, read: () => string | Promise<string>) => Promise<FileChangeInfo | undefined>;
+    transform: (code: string, filePath: string, forServer?: boolean) => ReturnType<AdapterHandler["transform"]>;
+    directVisit(clean: boolean, watch: boolean, sync: boolean): Promise<void>;
+    status(): Promise<AdapterStatus[]>;
+    check(full?: boolean): Promise<CheckResult>;
+}
+export {};

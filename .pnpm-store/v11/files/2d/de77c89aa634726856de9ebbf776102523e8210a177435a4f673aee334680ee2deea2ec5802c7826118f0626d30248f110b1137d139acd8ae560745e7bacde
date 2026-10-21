@@ -1,0 +1,34 @@
+import { type Logger } from '../log.js';
+import type { Item } from '../storage.js';
+type Batch = {
+    id: number;
+    targetLocales: string[];
+    messages: Item[];
+};
+type GroupKey = string | string[];
+export type AIPassThruOpts = {
+    batchSize: number;
+    parallel: number;
+    group: Record<string, string[][]>;
+};
+export type AI = AIPassThruOpts & {
+    name: string;
+    translate: (messages: string, instruction: string) => Promise<string>;
+};
+export default class AIQueue {
+    #private;
+    batches: Map<GroupKey, Batch[]>;
+    nextBatchId: number;
+    running: Promise<void> | null;
+    sourceLocale: string;
+    ai: AI;
+    onComplete: () => Promise<void>;
+    log: Logger;
+    constructor(sourceLocale: string, ai: AI, onComplete: () => Promise<void>, log: Logger);
+    translate: (batch: Batch, attempt?: number) => Promise<void>;
+    run: () => Promise<void>;
+    groupItemsByLocales: (items: Item[]) => Map<GroupKey, Item[]>;
+    prepItemsInBatches: (itemsByGroup: Map<GroupKey, Item[]>) => [string, Batch, number][];
+    add: (items: Item[]) => void;
+}
+export {};

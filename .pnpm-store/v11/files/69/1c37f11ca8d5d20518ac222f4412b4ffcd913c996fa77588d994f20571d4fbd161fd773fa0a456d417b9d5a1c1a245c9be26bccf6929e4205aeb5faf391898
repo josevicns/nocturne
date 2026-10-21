@@ -1,0 +1,6 @@
+import type { ChartState } from '../states/chart.svelte.js';
+import type { AnyScale } from '../utils/scales.svelte.js';
+export type { ChartState };
+export type { NodeKind, ComponentNode, RegisterComponentOptions, } from '../states/chart.svelte.js';
+export declare function getChartContext<T, XScale extends AnyScale = AnyScale, YScale extends AnyScale = AnyScale>(): ChartState<T, XScale, YScale>;
+export declare function setChartContext<T, XScale extends AnyScale = AnyScale, YScale extends AnyScale = AnyScale>(context: ChartState<T, XScale, YScale>): ChartState<T, XScale, YScale>;

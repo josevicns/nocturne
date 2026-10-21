@@ -1,0 +1,118 @@
+import { untrack } from 'svelte';
+import { hasAnyDataProp, resolveDataProp, resolveGeoDataPair } from '../../utils/dataProp.js';
+import { chartDataArray } from '../../utils/common.js';
+import { createMotion, createDataMotionMap, extractTweenConfig, } from '../../utils/motion.svelte.js';
+import { fade } from 'svelte/transition';
+import { cubicIn } from 'svelte/easing';
+import { getChartContext } from '../../contexts/chart.js';
+import { getGeoContext } from '../../contexts/geo.js';
+const defaultKey = (_, i) => i;
+/**
+ * Reactive state shared by every per-layer Group variant.
+ */
+export class GroupState {
+    #getProps = () => ({});
+    /**
+     * Memoized props — the component's props closure allocates a fresh object
+     * (it spreads `rest`), so calling it once per derived meant one allocation
+     * per derived per update. Read it once here instead.
+     */
+    #props = $derived(this.#getProps());
+    chartCtx = getChartContext();
+    geo = getGeoContext();
+    // Data mode detection
+    dataMode = $derived(hasAnyDataProp(this.#props.x, this.#props.y));
+    #resolvedData = $derived(this.dataMode ? (this.#props.data ?? chartDataArray(this.chartCtx.data)) : []);
+    resolvedItems = $derived.by(() => {
+        if (!this.dataMode)
+            return [];
+        const props = this.#props;
+        const keyFn = props.key ?? defaultKey;
+        return this.#resolvedData.map((d, i) => {
+            const key = keyFn(d, i);
+            const resolved = this.#resolveGroup(d);
+            const animated = this.#dataMotionMap?.get(key);
+            return {
+                d,
+                key,
+                x: animated?.x ?? resolved.x,
+                y: animated?.y ?? resolved.y,
+            };
+        });
+    });
+    #resolveGroup(d) {
+        const props = this.#props;
+        if (this.geo.projection) {
+            const [projX, projY] = resolveGeoDataPair(props.x, props.y, d, this.geo.projection);
+            return { x: projX, y: projY };
+        }
+        return {
+            x: resolveDataProp(props.x, d, this.chartCtx.xScale, 0),
+            y: resolveDataProp(props.y, d, this.chartCtx.yScale, 0),
+        };
+    }
+    // Pixel-mode position (with center support)
+    trueX = $derived.by(() => {
+        const props = this.#props;
+        if (typeof props.x === 'number')
+            return props.x;
+        if (props.x == null && (props.center === 'x' || props.center === true))
+            return this.chartCtx.width / 2;
+        return 0;
+    });
+    trueY = $derived.by(() => {
+        const props = this.#props;
+        if (typeof props.y === 'number')
+            return props.y;
+        if (props.y == null && (props.center === 'y' || props.center === true))
+            return this.chartCtx.height / 2;
+        return 0;
+    });
+    #dataMotionMap = null;
+    #motionX;
+    #motionY;
+    get motionX() {
+        return this.#motionX.current;
+    }
+    get motionY() {
+        return this.#motionY.current;
+    }
+    // Transform string for SVG/HTML pixel mode
+    transform = $derived.by(() => {
+        const props = this.#props;
+        if (props.center || props.x != null || props.y != null) {
+            return `translate(${this.motionX}px, ${this.motionY}px)`;
+        }
+        return undefined;
+    });
+    // Default transition (fade when motion is tweened)
+    defaultTransitionIn = $derived(extractTweenConfig(this.#props.motion)?.options ? fade : () => ({}));
+    defaultTransitionInParams = { easing: cubicIn };
+    constructor(getProps) {
+        this.#getProps = getProps;
+        const initial = getProps();
+        const initialX = initial.initialX ?? (typeof initial.x === 'number' ? initial.x : undefined);
+        const initialY = initial.initialY ?? (typeof initial.y === 'number' ? initial.y : undefined);
+        this.#motionX = createMotion(initialX, () => this.trueX, initial.motion);
+        this.#motionY = createMotion(initialY, () => this.trueY, initial.motion);
+        this.#dataMotionMap = createDataMotionMap(initial.motion);
+        if (this.#dataMotionMap) {
+            const motionMap = this.#dataMotionMap;
+            $effect(() => {
+                if (!this.dataMode)
+                    return;
+                const props = this.#props;
+                const keyFn = props.key ?? defaultKey;
+                const activeKeys = new Set();
+                for (let i = 0; i < this.#resolvedData.length; i++) {
+                    const d = this.#resolvedData[i];
+                    const key = keyFn(d, i);
+                    activeKeys.add(key);
+                    const resolved = this.#resolveGroup(d);
+                    untrack(() => motionMap.update(key, resolved));
+                }
+                untrack(() => motionMap.cleanup(activeKeys));
+            });
+        }
+    }
+}

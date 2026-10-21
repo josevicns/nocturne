@@ -1,0 +1,181 @@
+import { untrack } from 'svelte';
+import { interpolatePath } from 'd3-interpolate-path';
+import { hasAnyDataProp, resolveDataProp, resolveGeoDataPair } from '../../utils/dataProp.js';
+import { chartDataArray } from '../../utils/common.js';
+import { polygon } from '../../utils/shape.js';
+import { roundedPolygonPath } from '../../utils/path.js';
+import { createMotion, createDataMotionMap, extractTweenConfig, } from '../../utils/motion.svelte.js';
+import { getChartContext } from '../../contexts/chart.js';
+import { getGeoContext } from '../../contexts/geo.js';
+const defaultKey = (_, i) => i;
+export function polygonMarkInfo(props, dataMode) {
+    if (!dataMode)
+        return {};
+    return {
+        data: props.data,
+        x: typeof props.cx === 'string' ? props.cx : undefined,
+        y: typeof props.cy === 'string' ? props.cy : undefined,
+        color: typeof props.fill === 'string'
+            ? props.fill
+            : typeof props.stroke === 'string'
+                ? props.stroke
+                : undefined,
+    };
+}
+export class PolygonState {
+    #getProps = () => ({});
+    chartCtx = getChartContext();
+    geo = getGeoContext();
+    dataMode = $derived(hasAnyDataProp(this.#getProps().cx, this.#getProps().cy, this.#getProps().r));
+    resolvedData = $derived(this.dataMode ? (this.#getProps().data ?? chartDataArray(this.chartCtx.data)) : []);
+    resolvedItems = $derived.by(() => {
+        if (!this.dataMode)
+            return [];
+        const props = this.#getProps();
+        const keyFn = props.key ?? defaultKey;
+        return this.resolvedData.map((d, i) => {
+            const key = keyFn(d, i);
+            let resolvedCx, resolvedCy;
+            if (this.geo.projection) {
+                [resolvedCx, resolvedCy] = resolveGeoDataPair(props.cx, props.cy, d, this.geo.projection);
+            }
+            else {
+                resolvedCx = resolveDataProp(props.cx, d, this.chartCtx.xScale, 0);
+                resolvedCy = resolveDataProp(props.cy, d, this.chartCtx.yScale, 0);
+            }
+            const resolvedR = resolveDataProp(props.r, d, this.chartCtx.rScale, typeof props.r === 'number' ? props.r : 1);
+            const animated = this.#dataMotionMap?.get(key);
+            return {
+                d,
+                key,
+                cx: animated?.cx ?? resolvedCx,
+                cy: animated?.cy ?? resolvedCy,
+                r: animated?.r ?? resolvedR,
+            };
+        });
+    });
+    /** Resolve a single data item to a polygon path string. */
+    resolvePolygonPath(d) {
+        const props = this.#getProps();
+        let resolvedCx, resolvedCy;
+        if (this.geo.projection) {
+            [resolvedCx, resolvedCy] = resolveGeoDataPair(props.cx, props.cy, d, this.geo.projection);
+        }
+        else {
+            resolvedCx = resolveDataProp(props.cx, d, this.chartCtx.xScale, 0);
+            resolvedCy = resolveDataProp(props.cy, d, this.chartCtx.yScale, 0);
+        }
+        const resolvedR = resolveDataProp(props.r, d, this.chartCtx.rScale, typeof props.r === 'number' ? props.r : 1);
+        const pts = typeof props.points === 'number' || props.points === undefined
+            ? polygon({
+                cx: resolvedCx,
+                cy: resolvedCy,
+                count: typeof props.points === 'number' ? props.points : 4,
+                radius: resolvedR,
+                rotate: props.rotate ?? 0,
+                inset: props.inset ?? 0,
+                scaleX: props.scaleX ?? 1,
+                scaleY: props.scaleY ?? 1,
+                skewX: props.skewX ?? 0,
+                skewY: props.skewY ?? 0,
+                tiltX: props.tiltX ?? 0,
+                tiltY: props.tiltY ?? 0,
+            })
+            : props.points;
+        return roundedPolygonPath(pts, props.cornerRadius ?? 0);
+    }
+    // Pixel-mode motion sources
+    #dataMotionMap = null;
+    #motionCx;
+    #motionCy;
+    #motionR;
+    #tweenedState;
+    get motionCx() {
+        return this.#motionCx.current;
+    }
+    get motionCy() {
+        return this.#motionCy.current;
+    }
+    get motionR() {
+        return this.#motionR.current;
+    }
+    get tweenedPathData() {
+        return this.#tweenedState.current;
+    }
+    // Pixel-mode polygon path string (depends on motion + transform props)
+    pixelPathData = $derived.by(() => {
+        const props = this.#getProps();
+        const pts = typeof props.points === 'number' || props.points === undefined
+            ? polygon({
+                cx: this.motionCx,
+                cy: this.motionCy,
+                count: typeof props.points === 'number' ? props.points : 4,
+                radius: this.motionR,
+                rotate: props.rotate ?? 0,
+                inset: props.inset ?? 0,
+                scaleX: props.scaleX ?? 1,
+                scaleY: props.scaleY ?? 1,
+                skewX: props.skewX ?? 0,
+                skewY: props.skewY ?? 0,
+                tiltX: props.tiltX ?? 0,
+                tiltY: props.tiltY ?? 0,
+            })
+            : props.points;
+        return roundedPolygonPath(pts, props.cornerRadius ?? 0);
+    });
+    staticFill = $derived(typeof this.#getProps().fill === 'string' ? this.#getProps().fill : undefined);
+    staticFillOpacity = $derived(typeof this.#getProps().fillOpacity === 'number'
+        ? this.#getProps().fillOpacity
+        : undefined);
+    staticStroke = $derived(typeof this.#getProps().stroke === 'string' ? this.#getProps().stroke : undefined);
+    staticStrokeWidth = $derived(typeof this.#getProps().strokeWidth === 'number'
+        ? this.#getProps().strokeWidth
+        : undefined);
+    staticOpacity = $derived(typeof this.#getProps().opacity === 'number' ? this.#getProps().opacity : undefined);
+    staticClassName = $derived(typeof this.#getProps().class === 'string' ? this.#getProps().class : undefined);
+    constructor(getProps) {
+        this.#getProps = getProps;
+        const initial = getProps();
+        const initialCx = initial.initialCx ?? (typeof initial.cx === 'number' ? initial.cx : 0);
+        const initialCy = initial.initialCy ?? (typeof initial.cy === 'number' ? initial.cy : 0);
+        const initialR = initial.initialR ?? (typeof initial.r === 'number' ? initial.r : 1);
+        this.#motionCx = createMotion(initialCx, () => (typeof getProps().cx === 'number' ? getProps().cx : 0), initial.motion);
+        this.#motionCy = createMotion(initialCy, () => (typeof getProps().cy === 'number' ? getProps().cy : 0), initial.motion);
+        this.#motionR = createMotion(initialR, () => (typeof getProps().r === 'number' ? getProps().r : 1), initial.motion);
+        const extractedTween = extractTweenConfig(initial.motion);
+        const tweenedOptions = extractedTween
+            ? {
+                type: extractedTween.type,
+                options: { interpolate: interpolatePath, ...extractedTween.options },
+            }
+            : undefined;
+        this.#tweenedState = createMotion(null, () => this.pixelPathData, tweenedOptions);
+        this.#dataMotionMap = createDataMotionMap(initial.motion);
+        if (this.#dataMotionMap) {
+            const motionMap = this.#dataMotionMap;
+            $effect(() => {
+                if (!this.dataMode)
+                    return;
+                const props = getProps();
+                const keyFn = props.key ?? defaultKey;
+                const activeKeys = new Set();
+                for (let i = 0; i < this.resolvedData.length; i++) {
+                    const d = this.resolvedData[i];
+                    const key = keyFn(d, i);
+                    activeKeys.add(key);
+                    let resolvedCx, resolvedCy;
+                    if (this.geo.projection) {
+                        [resolvedCx, resolvedCy] = resolveGeoDataPair(props.cx, props.cy, d, this.geo.projection);
+                    }
+                    else {
+                        resolvedCx = resolveDataProp(props.cx, d, this.chartCtx.xScale, 0);
+                        resolvedCy = resolveDataProp(props.cy, d, this.chartCtx.yScale, 0);
+                    }
+                    const resolvedR = resolveDataProp(props.r, d, this.chartCtx.rScale, typeof props.r === 'number' ? props.r : 1);
+                    untrack(() => motionMap.update(key, { cx: resolvedCx, cy: resolvedCy, r: resolvedR }));
+                }
+                untrack(() => motionMap.cleanup(activeKeys));
+            });
+        }
+    }
+}

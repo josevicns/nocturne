@@ -1,0 +1,30 @@
+{
+    "name": "@types/gettext-parser",
+    "version": "8.0.0",
+    "description": "TypeScript definitions for gettext-parser",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/gettext-parser",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Lorent Lempereur",
+            "githubUsername": "looorent",
+            "url": "https://github.com/looorent"
+        }
+    ],
+    "type": "module",
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/gettext-parser"
+    },
+    "scripts": {},
+    "dependencies": {
+        "@types/node": "*",
+        "@types/readable-stream": "*"
+    },
+    "peerDependencies": {},
+    "typesPublisherContentHash": "33efd5041e2595ce3be0a1b0fb23ada001522c794c7253eea13f76d6eb6a0974",
+    "typeScriptVersion": "5.0"
+}

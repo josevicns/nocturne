@@ -1,0 +1,1820 @@
+// src/index.ts
+import { timingSafeEqual } from "crypto";
+import {
+  AdapterRateLimitError,
+  AuthenticationError,
+  cardToFallbackText,
+  extractCard,
+  extractFiles,
+  extractPostableAttachments,
+  NetworkError,
+  PermissionError,
+  ResourceNotFoundError,
+  ValidationError as ValidationError2
+} from "@chat-adapter/shared";
+import {
+  ConsoleLogger,
+  convertEmojiPlaceholders as convertEmojiPlaceholders2,
+  defaultEmojiResolver,
+  getEmoji,
+  Message,
+  NotImplementedError
+} from "chat";
+
+// src/cards.ts
+import { ValidationError } from "@chat-adapter/shared";
+import { convertEmojiPlaceholders } from "chat";
+var CALLBACK_DATA_PREFIX = "chat:";
+var TELEGRAM_CALLBACK_DATA_LIMIT_BYTES = 64;
+function convertLabel(label) {
+  return convertEmojiPlaceholders(label, "gchat");
+}
+function toInlineKeyboardRow(actions) {
+  const row = [];
+  for (const action of actions.children) {
+    if (action.type === "button") {
+      row.push({
+        text: convertLabel(action.label),
+        callback_data: encodeTelegramCallbackData(action.id, action.value)
+      });
+      continue;
+    }
+    if (action.type === "link-button") {
+      row.push({
+        text: convertLabel(action.label),
+        url: action.url
+      });
+    }
+  }
+  return row;
+}
+function collectInlineKeyboardRows(children, rows) {
+  for (const child of children) {
+    if (child.type === "actions") {
+      const row = toInlineKeyboardRow(child);
+      if (row.length > 0) {
+        rows.push(row);
+      }
+      continue;
+    }
+    if (child.type === "section") {
+      collectInlineKeyboardRows(child.children, rows);
+    }
+  }
+}
+function cardToTelegramInlineKeyboard(card) {
+  const rows = [];
+  collectInlineKeyboardRows(card.children, rows);
+  if (rows.length === 0) {
+    return void 0;
+  }
+  return {
+    inline_keyboard: rows
+  };
+}
+function emptyTelegramInlineKeyboard() {
+  return { inline_keyboard: [] };
+}
+function encodeTelegramCallbackData(actionId, value) {
+  const payload = { a: actionId };
+  if (typeof value === "string") {
+    payload.v = value;
+  }
+  const callbackData = `${CALLBACK_DATA_PREFIX}${JSON.stringify(payload)}`;
+  if (Buffer.byteLength(callbackData, "utf8") > TELEGRAM_CALLBACK_DATA_LIMIT_BYTES) {
+    throw new ValidationError(
+      "telegram",
+      `Callback payload too large for Telegram (max ${TELEGRAM_CALLBACK_DATA_LIMIT_BYTES} bytes).`
+    );
+  }
+  return callbackData;
+}
+function decodeTelegramCallbackData(data) {
+  if (!data) {
+    return { actionId: "telegram_callback", value: void 0 };
+  }
+  if (!data.startsWith(CALLBACK_DATA_PREFIX)) {
+    return { actionId: data, value: data };
+  }
+  try {
+    const decoded = JSON.parse(
+      data.slice(CALLBACK_DATA_PREFIX.length)
+    );
+    if (typeof decoded.a === "string" && decoded.a) {
+      return {
+        actionId: decoded.a,
+        value: typeof decoded.v === "string" ? decoded.v : void 0
+      };
+    }
+  } catch {
+  }
+  return { actionId: data, value: data };
+}
+
+// src/markdown.ts
+import {
+  BaseFormatConverter,
+  isTableNode,
+  parseMarkdown,
+  tableToAscii,
+  walkAst
+} from "chat";
+var MARKDOWNV2_SPECIAL_CHARS = /([_*[\]()~`>#+\-=|{}.!\\])/g;
+var CODE_BLOCK_SPECIAL_CHARS = /([`\\])/g;
+var LINK_URL_SPECIAL_CHARS = /([)\\])/g;
+function toBotApiParseMode(mode) {
+  return mode === "MarkdownV2" ? "MarkdownV2" : void 0;
+}
+var TELEGRAM_MESSAGE_LIMIT = 4096;
+var TELEGRAM_CAPTION_LIMIT = 1024;
+var MARKDOWN_V2_ENTITY_MARKERS = ["*", "_", "~", "`"];
+var MARKDOWN_V2_ELLIPSIS = "\\.\\.\\.";
+var PLAIN_ELLIPSIS = "...";
+function escapeMarkdownV2(text) {
+  return text.replace(MARKDOWNV2_SPECIAL_CHARS, "\\$1");
+}
+function findUnescapedPositions(text, marker) {
+  const positions = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== marker) {
+      continue;
+    }
+    let backslashes = 0;
+    let j = i - 1;
+    while (j >= 0 && text[j] === "\\") {
+      backslashes++;
+      j--;
+    }
+    if (backslashes % 2 === 0) {
+      positions.push(i);
+    }
+  }
+  return positions;
+}
+function findUnescapedPositionsOutsideCode(text, marker) {
+  const positions = [];
+  let inFence = false;
+  let inInline = false;
+  let backslashes = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "\\") {
+      backslashes++;
+      continue;
+    }
+    const escaped = backslashes % 2 === 1;
+    backslashes = 0;
+    if (ch === "`" && !escaped) {
+      const isTriple = text[i + 1] === "`" && text[i + 2] === "`";
+      if (isTriple && !inInline) {
+        inFence = !inFence;
+        i += 2;
+        continue;
+      }
+      if (!inFence) {
+        inInline = !inInline;
+      }
+      continue;
+    }
+    if (ch === marker && !escaped && !inFence && !inInline) {
+      positions.push(i);
+    }
+  }
+  return positions;
+}
+function endsWithOrphanBackslash(text) {
+  let trailing = 0;
+  for (let i = text.length - 1; i >= 0 && text[i] === "\\"; i--) {
+    trailing++;
+  }
+  return trailing % 2 === 1;
+}
+function trimToMarkdownV2SafeBoundary(text) {
+  let current = text;
+  const maxIterations = current.length + 1;
+  for (let i = 0; i < maxIterations; i++) {
+    if (endsWithOrphanBackslash(current)) {
+      current = current.slice(0, -1);
+      continue;
+    }
+    let minUnsafePosition = current.length;
+    for (const marker of MARKDOWN_V2_ENTITY_MARKERS) {
+      const positions = marker === "`" ? findUnescapedPositions(current, marker) : findUnescapedPositionsOutsideCode(current, marker);
+      if (positions.length % 2 === 1) {
+        const lastUnpaired = positions.at(-1) ?? current.length;
+        if (lastUnpaired < minUnsafePosition) {
+          minUnsafePosition = lastUnpaired;
+        }
+      }
+    }
+    const openBrackets = findUnescapedPositionsOutsideCode(current, "[");
+    const closeBrackets = findUnescapedPositionsOutsideCode(current, "]");
+    if (openBrackets.length > closeBrackets.length) {
+      const lastOpen = openBrackets.at(-1) ?? current.length;
+      if (lastOpen < minUnsafePosition) {
+        minUnsafePosition = lastOpen;
+      }
+    }
+    if (minUnsafePosition >= current.length) {
+      return current;
+    }
+    current = current.slice(0, minUnsafePosition);
+  }
+  return current;
+}
+function truncateForTelegram(text, limit, parseMode) {
+  const isMarkdownV2 = parseMode === "MarkdownV2";
+  if (text.length <= limit) {
+    return isMarkdownV2 ? trimToMarkdownV2SafeBoundary(text) : text;
+  }
+  const ellipsis = isMarkdownV2 ? MARKDOWN_V2_ELLIPSIS : PLAIN_ELLIPSIS;
+  let slice = text.slice(0, limit - ellipsis.length);
+  if (isMarkdownV2) {
+    slice = trimToMarkdownV2SafeBoundary(slice);
+  }
+  return `${slice}${ellipsis}`;
+}
+function escapeCodeBlock(text) {
+  return text.replace(CODE_BLOCK_SPECIAL_CHARS, "\\$1");
+}
+function escapeLinkUrl(text) {
+  return text.replace(LINK_URL_SPECIAL_CHARS, "\\$1");
+}
+function renderMarkdownV2(node) {
+  switch (node.type) {
+    case "root":
+      return node.children.map(renderMarkdownV2).join("\n\n");
+    case "paragraph":
+      return node.children.map(renderMarkdownV2).join("");
+    case "text":
+      return escapeMarkdownV2(node.value);
+    case "strong":
+      return `*${node.children.map(renderMarkdownV2).join("")}*`;
+    case "emphasis":
+      return `_${node.children.map(renderMarkdownV2).join("")}_`;
+    case "delete":
+      return `~${node.children.map(renderMarkdownV2).join("")}~`;
+    case "inlineCode":
+      return `\`${escapeCodeBlock(node.value)}\``;
+    case "code": {
+      const lang = node.lang ?? "";
+      const val = escapeCodeBlock(node.value);
+      return `\`\`\`${lang}
+${val}
+\`\`\``;
+    }
+    case "link": {
+      const linkText = node.children.map(renderMarkdownV2).join("");
+      const url = escapeLinkUrl(node.url);
+      return `[${linkText}](${url})`;
+    }
+    case "blockquote": {
+      const inner = node.children.map(renderMarkdownV2).join("\n");
+      return inner.split("\n").map((line) => `>${line}`).join("\n");
+    }
+    case "list":
+      return node.children.map((item, i) => {
+        const content = item.children.map(renderMarkdownV2).join("\n");
+        if (node.ordered) {
+          return `${escapeMarkdownV2(`${i + 1}.`)} ${content}`;
+        }
+        return `\\- ${content}`;
+      }).join("\n");
+    case "listItem":
+      return node.children.map(renderMarkdownV2).join("\n");
+    case "heading": {
+      const text = node.children.map(renderMarkdownV2).join("");
+      return `*${text}*`;
+    }
+    case "thematicBreak":
+      return escapeMarkdownV2("\u2014\u2014\u2014");
+    case "break":
+      return "\n";
+    case "image": {
+      const alt = escapeMarkdownV2(node.alt ?? "");
+      const url = escapeLinkUrl(node.url);
+      return `[${alt}](${url})`;
+    }
+    case "html":
+      return escapeMarkdownV2(node.value);
+    case "linkReference":
+    case "imageReference":
+      if ("children" in node && node.children.length > 0) {
+        return node.children.map(renderMarkdownV2).join("");
+      }
+      return escapeMarkdownV2(node.label ?? node.identifier);
+    case "definition":
+      return "";
+    case "footnoteDefinition":
+      return "";
+    case "footnoteReference":
+      return escapeMarkdownV2(`[^${node.label ?? node.identifier}]`);
+    case "yaml":
+      return "";
+    case "table":
+    case "tableRow":
+    case "tableCell":
+      throw new Error(
+        `Telegram MarkdownV2 renderer received a ${node.type} node; fromAst should have preprocessed it into a code block.`
+      );
+    default: {
+      throw new Error(`Unhandled case: ${node}`);
+    }
+  }
+}
+var TelegramFormatConverter = class extends BaseFormatConverter {
+  fromAst(ast) {
+    const transformed = walkAst(structuredClone(ast), (node) => {
+      if (isTableNode(node)) {
+        return {
+          type: "code",
+          value: tableToAscii(node),
+          lang: void 0
+        };
+      }
+      return node;
+    });
+    return renderMarkdownV2(transformed).trim();
+  }
+  toAst(text) {
+    return parseMarkdown(text);
+  }
+  renderPostable(message) {
+    if (typeof message === "string") {
+      return message;
+    }
+    if ("raw" in message) {
+      return message.raw;
+    }
+    if ("markdown" in message) {
+      return this.fromMarkdown(message.markdown);
+    }
+    if ("ast" in message) {
+      return this.fromAst(message.ast);
+    }
+    return super.renderPostable(message);
+  }
+};
+
+// src/index.ts
+var TELEGRAM_API_BASE = "https://api.telegram.org";
+var TELEGRAM_SECRET_TOKEN_HEADER = "x-telegram-bot-api-secret-token";
+var MESSAGE_ID_PATTERN = /^([^:]+):(\d+)$/;
+var trimTrailingSlashes = (url) => {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === "/") {
+    end--;
+  }
+  return url.slice(0, end);
+};
+var MESSAGE_SEQUENCE_PATTERN = /:(\d+)$/;
+var ATTACHMENT_UPLOADS = {
+  audio: { field: "audio", method: "sendAudio" },
+  file: { field: "document", method: "sendDocument" },
+  image: { field: "photo", method: "sendPhoto" },
+  video: { field: "video", method: "sendVideo" }
+};
+var LEADING_AT_PATTERN = /^@+/;
+var EMOJI_PLACEHOLDER_PATTERN = /^\{\{emoji:([a-z0-9_]+)\}\}$/i;
+var EMOJI_NAME_PATTERN = /^[a-z0-9_+-]+$/i;
+var TELEGRAM_DEFAULT_POLLING_TIMEOUT_SECONDS = 30;
+var TELEGRAM_DEFAULT_POLLING_LIMIT = 100;
+var TELEGRAM_DEFAULT_POLLING_RETRY_DELAY_MS = 1e3;
+var TELEGRAM_MAX_POLLING_LIMIT = 100;
+var TELEGRAM_MIN_POLLING_LIMIT = 1;
+var TELEGRAM_MIN_POLLING_TIMEOUT_SECONDS = 0;
+var TELEGRAM_MAX_POLLING_TIMEOUT_SECONDS = 300;
+var escapeMarkdownInEntity = (text) => text.replace(/([[\]()\\])/g, "\\$1");
+function applyTelegramEntities(text, entities) {
+  if (entities.length === 0) {
+    return text;
+  }
+  const sorted = [...entities].sort((a, b) => {
+    const offsetDiff = b.offset - a.offset;
+    if (offsetDiff !== 0) {
+      return offsetDiff;
+    }
+    return a.length - b.length;
+  });
+  let result = text;
+  for (const entity of sorted) {
+    const start = entity.offset;
+    const end = entity.offset + entity.length;
+    const entityText = result.slice(start, end);
+    let replacement;
+    switch (entity.type) {
+      case "text_link": {
+        if (entity.url) {
+          replacement = `[${escapeMarkdownInEntity(entityText)}](${entity.url})`;
+        }
+        break;
+      }
+      case "bold": {
+        replacement = `**${entityText}**`;
+        break;
+      }
+      case "italic": {
+        replacement = `*${entityText}*`;
+        break;
+      }
+      case "code": {
+        replacement = `\`${entityText}\``;
+        break;
+      }
+      case "pre": {
+        const lang = entity.language ?? "";
+        replacement = `\`\`\`${lang}
+${entityText}
+\`\`\``;
+        break;
+      }
+      case "strikethrough": {
+        replacement = `~~${entityText}~~`;
+        break;
+      }
+      default:
+        break;
+    }
+    if (replacement !== void 0) {
+      result = result.slice(0, start) + replacement + result.slice(end);
+    }
+  }
+  return result;
+}
+var TelegramAdapter = class {
+  name = "telegram";
+  lockScope = "channel";
+  persistThreadHistory = true;
+  botToken;
+  apiBaseUrl;
+  secretToken;
+  warnedNoVerification = false;
+  logger;
+  formatConverter = new TelegramFormatConverter();
+  messageCache = /* @__PURE__ */ new Map();
+  chat = null;
+  _botUserId;
+  _userName;
+  hasExplicitUserName;
+  mode;
+  longPolling;
+  _runtimeMode = "webhook";
+  pollingAbortController = null;
+  pollingTask = null;
+  pollingActive = false;
+  get botUserId() {
+    return this._botUserId;
+  }
+  get userName() {
+    return this._userName;
+  }
+  get isPolling() {
+    return this.pollingActive;
+  }
+  get runtimeMode() {
+    return this._runtimeMode;
+  }
+  constructor(config = {}) {
+    const botToken = config.botToken ?? process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
+      throw new ValidationError2(
+        "telegram",
+        "botToken is required. Set TELEGRAM_BOT_TOKEN or provide it in config."
+      );
+    }
+    this.botToken = botToken;
+    this.apiBaseUrl = trimTrailingSlashes(
+      config.apiUrl ?? config.apiBaseUrl ?? process.env.TELEGRAM_API_BASE_URL ?? TELEGRAM_API_BASE
+    );
+    this.secretToken = config.secretToken ?? process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN;
+    this.logger = config.logger ?? new ConsoleLogger("info").child("telegram");
+    const userName = config.userName ?? process.env.TELEGRAM_BOT_USERNAME;
+    this._userName = this.normalizeUserName(userName ?? "bot");
+    this.hasExplicitUserName = Boolean(userName);
+    this.mode = config.mode ?? "auto";
+    this.longPolling = config.longPolling;
+    if (!["auto", "webhook", "polling"].includes(this.mode)) {
+      throw new ValidationError2(
+        "telegram",
+        `Invalid mode: ${this.mode}. Expected "auto", "webhook", or "polling".`
+      );
+    }
+  }
+  async initialize(chat) {
+    this.chat = chat;
+    if (!this.hasExplicitUserName) {
+      const chatUserName = chat.getUserName?.();
+      if (typeof chatUserName === "string" && chatUserName.trim()) {
+        this._userName = this.normalizeUserName(chatUserName);
+      }
+    }
+    try {
+      const me = await this.telegramFetch("getMe");
+      this._botUserId = String(me.id);
+      if (!this.hasExplicitUserName && me.username) {
+        this._userName = this.normalizeUserName(me.username);
+      }
+      this.logger.info("Telegram adapter initialized", {
+        botUserId: this._botUserId,
+        userName: this._userName
+      });
+    } catch (error) {
+      this.logger.warn("Failed to fetch Telegram bot identity", {
+        error: String(error)
+      });
+    }
+    const runtimeMode = await this.resolveRuntimeMode();
+    this._runtimeMode = runtimeMode;
+    if (runtimeMode === "polling") {
+      const pollingConfig = this.longPolling;
+      if (this.mode === "auto") {
+        await this.startPolling(
+          pollingConfig ? { ...pollingConfig, deleteWebhook: false } : { deleteWebhook: false }
+        );
+      } else {
+        await this.startPolling(pollingConfig);
+      }
+    }
+  }
+  async getUser(userId) {
+    try {
+      const chat = await this.telegramFetch("getChat", {
+        chat_id: userId
+      });
+      if (chat.type !== "private") {
+        return null;
+      }
+      const fullName = [chat.first_name, chat.last_name].filter(Boolean).join(" ");
+      return {
+        email: void 0,
+        fullName: fullName || String(chat.id),
+        // Telegram's getChat API doesn't expose is_bot (only available on TelegramUser).
+        // Always returns false — callers needing bot detection should use message.author.isBot instead.
+        isBot: false,
+        userId: String(chat.id),
+        userName: chat.username || chat.first_name || String(chat.id)
+      };
+    } catch {
+      return null;
+    }
+  }
+  async handleWebhook(request, options) {
+    if (this.secretToken) {
+      const headerToken = request.headers.get(TELEGRAM_SECRET_TOKEN_HEADER);
+      let valid = false;
+      try {
+        valid = !!headerToken && timingSafeEqual(
+          Buffer.from(headerToken),
+          Buffer.from(this.secretToken)
+        );
+      } catch {
+      }
+      if (!valid) {
+        this.logger.warn(
+          "Telegram webhook rejected due to invalid secret token"
+        );
+        return new Response("Invalid secret token", { status: 401 });
+      }
+    } else if (!this.warnedNoVerification) {
+      this.warnedNoVerification = true;
+      this.logger.warn(
+        "Telegram webhook verification is disabled. Set TELEGRAM_WEBHOOK_SECRET_TOKEN or secretToken to verify incoming requests."
+      );
+    }
+    let update;
+    try {
+      update = await request.json();
+    } catch {
+      return new Response("Invalid JSON", { status: 400 });
+    }
+    if (!this.chat) {
+      this.logger.warn(
+        "Chat instance not initialized, ignoring Telegram webhook"
+      );
+      return new Response("OK", { status: 200 });
+    }
+    try {
+      this.processUpdate(update, options);
+    } catch (error) {
+      this.logger.warn("Failed to process Telegram webhook update", {
+        error: String(error),
+        updateId: update.update_id
+      });
+    }
+    return new Response("OK", { status: 200 });
+  }
+  async startPolling(config) {
+    if (!this.chat) {
+      throw new ValidationError2(
+        "telegram",
+        "Cannot start polling before initialize()"
+      );
+    }
+    if (this.pollingActive) {
+      this.logger.debug("Telegram polling already active");
+      return;
+    }
+    const resolvedConfig = this.resolvePollingConfig(config);
+    const previousRuntimeMode = this._runtimeMode;
+    this.pollingActive = true;
+    try {
+      if (resolvedConfig.deleteWebhook) {
+        await this.resetWebhook(resolvedConfig.dropPendingUpdates);
+      }
+      this._runtimeMode = "polling";
+    } catch (error) {
+      this.pollingActive = false;
+      this._runtimeMode = previousRuntimeMode;
+      throw error;
+    }
+    this.logger.info("Telegram polling started", {
+      limit: resolvedConfig.limit,
+      timeout: resolvedConfig.timeout,
+      allowedUpdates: resolvedConfig.allowedUpdates
+    });
+    this.pollingTask = this.pollingLoop(resolvedConfig).finally(() => {
+      this.pollingActive = false;
+      this.pollingAbortController = null;
+      this.pollingTask = null;
+    });
+  }
+  async stopPolling() {
+    if (!this.pollingActive) {
+      return;
+    }
+    this.pollingActive = false;
+    this.pollingAbortController?.abort();
+    if (this.pollingTask) {
+      await this.pollingTask;
+    }
+    this.logger.info("Telegram polling stopped");
+  }
+  async resetWebhook(dropPendingUpdates = false) {
+    await this.telegramFetch("deleteWebhook", {
+      drop_pending_updates: dropPendingUpdates
+    });
+    this.logger.info("Telegram webhook reset", {
+      dropPendingUpdates
+    });
+  }
+  async resolveRuntimeMode() {
+    if (this.mode === "webhook") {
+      return "webhook";
+    }
+    if (this.mode === "polling") {
+      return "polling";
+    }
+    const webhookInfo = await this.fetchWebhookInfo();
+    if (!webhookInfo) {
+      this.logger.warn(
+        "Telegram auto mode could not verify webhook status; keeping webhook mode"
+      );
+      return "webhook";
+    }
+    if (typeof webhookInfo.url === "string" && webhookInfo.url.trim()) {
+      this.logger.debug("Telegram auto mode selected webhook mode", {
+        webhookUrl: webhookInfo.url
+      });
+      return "webhook";
+    }
+    if (this.isLikelyServerlessRuntime()) {
+      this.logger.warn(
+        "Telegram auto mode detected serverless runtime without webhook URL; keeping webhook mode"
+      );
+      return "webhook";
+    }
+    this.logger.info("Telegram auto mode selected polling mode");
+    return "polling";
+  }
+  async fetchWebhookInfo() {
+    try {
+      return await this.telegramFetch("getWebhookInfo");
+    } catch (error) {
+      this.logger.warn("Failed to fetch Telegram webhook info", {
+        error: String(error)
+      });
+      return null;
+    }
+  }
+  isLikelyServerlessRuntime() {
+    if (typeof process === "undefined" || !process.env) {
+      return false;
+    }
+    return Boolean(
+      process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.AWS_EXECUTION_ENV?.includes("AWS_Lambda") || process.env.FUNCTIONS_WORKER_RUNTIME || process.env.NETLIFY || process.env.K_SERVICE
+    );
+  }
+  processUpdate(update, options) {
+    const messageUpdate = update.message ?? update.edited_message ?? update.channel_post ?? update.edited_channel_post;
+    if (messageUpdate) {
+      this.handleIncomingMessageUpdate(messageUpdate, options);
+    }
+    if (update.callback_query) {
+      this.handleCallbackQuery(update.callback_query, options);
+    }
+    if (update.message_reaction) {
+      this.handleMessageReactionUpdate(update.message_reaction, options);
+    }
+  }
+  handleIncomingMessageUpdate(telegramMessage, options) {
+    if (!this.chat) {
+      return;
+    }
+    const threadId = this.encodeThreadId({
+      chatId: String(telegramMessage.chat.id),
+      messageThreadId: telegramMessage.message_thread_id
+    });
+    const parsedMessage = this.parseTelegramMessage(telegramMessage, threadId);
+    this.cacheMessage(parsedMessage);
+    this.chat.processMessage(this, threadId, parsedMessage, options);
+  }
+  handleCallbackQuery(callbackQuery, options) {
+    if (!(this.chat && callbackQuery.message)) {
+      return;
+    }
+    const threadId = this.encodeThreadId({
+      chatId: String(callbackQuery.message.chat.id),
+      messageThreadId: callbackQuery.message.message_thread_id
+    });
+    const messageId = this.encodeMessageId(
+      String(callbackQuery.message.chat.id),
+      callbackQuery.message.message_id
+    );
+    const { actionId, value } = decodeTelegramCallbackData(callbackQuery.data);
+    this.chat.processAction(
+      {
+        adapter: this,
+        actionId,
+        value,
+        messageId,
+        threadId,
+        user: this.toAuthor(callbackQuery.from),
+        raw: callbackQuery
+      },
+      options
+    );
+    const ackTask = this.telegramFetch("answerCallbackQuery", {
+      callback_query_id: callbackQuery.id
+    }).catch((error) => {
+      this.logger.warn("Failed to acknowledge Telegram callback query", {
+        callbackQueryId: callbackQuery.id,
+        error: String(error)
+      });
+    });
+    if (options?.waitUntil) {
+      options.waitUntil(ackTask);
+    }
+  }
+  handleMessageReactionUpdate(reactionUpdate, options) {
+    if (!this.chat) {
+      return;
+    }
+    const threadId = this.encodeThreadId({
+      chatId: String(reactionUpdate.chat.id),
+      messageThreadId: reactionUpdate.message_thread_id
+    });
+    const messageId = this.encodeMessageId(
+      String(reactionUpdate.chat.id),
+      reactionUpdate.message_id
+    );
+    const oldReactions = new Set(
+      reactionUpdate.old_reaction.map((reaction) => this.reactionKey(reaction))
+    );
+    const newReactions = new Set(
+      reactionUpdate.new_reaction.map((reaction) => this.reactionKey(reaction))
+    );
+    const actor = reactionUpdate.user ? this.toAuthor(reactionUpdate.user) : this.toReactionActorAuthor(reactionUpdate.chat);
+    for (const reaction of reactionUpdate.new_reaction) {
+      const key = this.reactionKey(reaction);
+      if (!oldReactions.has(key)) {
+        this.chat.processReaction(
+          {
+            adapter: this,
+            threadId,
+            messageId,
+            emoji: this.reactionToEmojiValue(reaction),
+            rawEmoji: key,
+            added: true,
+            user: actor,
+            raw: reactionUpdate
+          },
+          options
+        );
+      }
+    }
+    for (const reaction of reactionUpdate.old_reaction) {
+      const key = this.reactionKey(reaction);
+      if (!newReactions.has(key)) {
+        this.chat.processReaction(
+          {
+            adapter: this,
+            threadId,
+            messageId,
+            emoji: this.reactionToEmojiValue(reaction),
+            rawEmoji: key,
+            added: false,
+            user: actor,
+            raw: reactionUpdate
+          },
+          options
+        );
+      }
+    }
+  }
+  async postMessage(threadId, message) {
+    const parsedThread = this.resolveThreadId(threadId);
+    const card = extractCard(message);
+    const replyMarkup = card ? cardToTelegramInlineKeyboard(card) : void 0;
+    const parseMode = this.resolveParseMode(message, card);
+    const text = truncateForTelegram(
+      convertEmojiPlaceholders2(
+        card ? this.formatConverter.fromMarkdown(
+          cardToFallbackText(card, { boldFormat: "**" })
+        ) : this.formatConverter.renderPostable(message),
+        "gchat"
+      ),
+      TELEGRAM_MESSAGE_LIMIT,
+      parseMode
+    );
+    const files = extractFiles(message);
+    if (files.length > 1) {
+      throw new ValidationError2(
+        "telegram",
+        "Telegram adapter supports a single file upload per message"
+      );
+    }
+    const attachments = extractPostableAttachments(message);
+    if (attachments.length > 1) {
+      throw new ValidationError2(
+        "telegram",
+        "Telegram adapter supports a single attachment upload per message"
+      );
+    }
+    if (files.length > 0 && attachments.length > 0) {
+      throw new ValidationError2(
+        "telegram",
+        "Telegram adapter does not support mixing file uploads and attachments in one message"
+      );
+    }
+    let rawMessage;
+    if (files.length === 1) {
+      const [file] = files;
+      if (!file) {
+        throw new ValidationError2("telegram", "File upload payload is empty");
+      }
+      rawMessage = await this.sendDocument(
+        parsedThread,
+        file,
+        text,
+        replyMarkup,
+        parseMode
+      );
+    } else if (attachments.length === 1) {
+      const [attachment] = attachments;
+      if (!attachment) {
+        throw new ValidationError2(
+          "telegram",
+          "Attachment upload payload is empty"
+        );
+      }
+      rawMessage = await this.sendAttachment(
+        parsedThread,
+        attachment,
+        text,
+        replyMarkup,
+        parseMode
+      );
+    } else {
+      if (!text.trim()) {
+        throw new ValidationError2("telegram", "Message text cannot be empty");
+      }
+      rawMessage = await this.telegramFetch("sendMessage", {
+        chat_id: parsedThread.chatId,
+        message_thread_id: parsedThread.messageThreadId,
+        text,
+        reply_markup: replyMarkup,
+        parse_mode: toBotApiParseMode(parseMode)
+      });
+    }
+    const resultingThreadId = this.encodeThreadId({
+      chatId: String(rawMessage.chat.id),
+      messageThreadId: rawMessage.message_thread_id ?? parsedThread.messageThreadId
+    });
+    const parsedMessage = this.parseTelegramMessage(
+      rawMessage,
+      resultingThreadId
+    );
+    this.cacheMessage(parsedMessage);
+    return {
+      id: parsedMessage.id,
+      threadId: parsedMessage.threadId,
+      raw: rawMessage
+    };
+  }
+  async postChannelMessage(channelId, message) {
+    return this.postMessage(channelId, message);
+  }
+  async editMessage(threadId, messageId, message) {
+    const parsedThread = this.resolveThreadId(threadId);
+    const {
+      chatId,
+      messageId: telegramMessageId,
+      compositeId
+    } = this.decodeCompositeMessageId(messageId, parsedThread.chatId);
+    const card = extractCard(message);
+    const replyMarkup = card ? cardToTelegramInlineKeyboard(card) : void 0;
+    const parseMode = this.resolveParseMode(message, card);
+    const text = truncateForTelegram(
+      convertEmojiPlaceholders2(
+        card ? this.formatConverter.fromMarkdown(
+          cardToFallbackText(card, { boldFormat: "**" })
+        ) : this.formatConverter.renderPostable(message),
+        "gchat"
+      ),
+      TELEGRAM_MESSAGE_LIMIT,
+      parseMode
+    );
+    if (!text.trim()) {
+      throw new ValidationError2("telegram", "Message text cannot be empty");
+    }
+    const result = await this.telegramFetch(
+      "editMessageText",
+      {
+        chat_id: chatId,
+        message_id: telegramMessageId,
+        text,
+        reply_markup: replyMarkup ?? emptyTelegramInlineKeyboard(),
+        parse_mode: toBotApiParseMode(parseMode)
+      }
+    );
+    if (result === true) {
+      const existing = this.findCachedMessage(compositeId);
+      if (!existing) {
+        throw new NotImplementedError(
+          "Telegram returned a non-message edit result and no cached message was found",
+          "editMessage"
+        );
+      }
+      const updated = new Message({
+        ...existing,
+        text,
+        formatted: this.formatConverter.toAst(text),
+        metadata: {
+          ...existing.metadata,
+          edited: true,
+          editedAt: /* @__PURE__ */ new Date()
+        }
+      });
+      this.cacheMessage(updated);
+      return {
+        id: updated.id,
+        threadId: updated.threadId,
+        raw: updated.raw
+      };
+    }
+    const resultingThreadId = this.encodeThreadId({
+      chatId: String(result.chat.id),
+      messageThreadId: result.message_thread_id ?? parsedThread.messageThreadId
+    });
+    const parsedMessage = this.parseTelegramMessage(result, resultingThreadId);
+    this.cacheMessage(parsedMessage);
+    return {
+      id: parsedMessage.id,
+      threadId: parsedMessage.threadId,
+      raw: result
+    };
+  }
+  async deleteMessage(threadId, messageId) {
+    const parsedThread = this.resolveThreadId(threadId);
+    const {
+      chatId,
+      messageId: telegramMessageId,
+      compositeId
+    } = this.decodeCompositeMessageId(messageId, parsedThread.chatId);
+    await this.telegramFetch("deleteMessage", {
+      chat_id: chatId,
+      message_id: telegramMessageId
+    });
+    this.deleteCachedMessage(compositeId);
+  }
+  async addReaction(threadId, messageId, emoji) {
+    const parsedThread = this.resolveThreadId(threadId);
+    const { chatId, messageId: telegramMessageId } = this.decodeCompositeMessageId(messageId, parsedThread.chatId);
+    await this.telegramFetch("setMessageReaction", {
+      chat_id: chatId,
+      message_id: telegramMessageId,
+      reaction: [this.toTelegramReaction(emoji)]
+    });
+  }
+  async removeReaction(threadId, messageId, _emoji) {
+    const parsedThread = this.resolveThreadId(threadId);
+    const { chatId, messageId: telegramMessageId } = this.decodeCompositeMessageId(messageId, parsedThread.chatId);
+    await this.telegramFetch("setMessageReaction", {
+      chat_id: chatId,
+      message_id: telegramMessageId,
+      reaction: []
+    });
+  }
+  async startTyping(threadId) {
+    const parsedThread = this.resolveThreadId(threadId);
+    await this.telegramFetch("sendChatAction", {
+      chat_id: parsedThread.chatId,
+      message_thread_id: parsedThread.messageThreadId,
+      action: "typing"
+    });
+  }
+  async fetchMessages(threadId, options = {}) {
+    const messages = [...this.messageCache.get(threadId) ?? []].sort(
+      (a, b) => this.compareMessages(a, b)
+    );
+    return this.paginateMessages(messages, options);
+  }
+  async fetchChannelMessages(channelId, options = {}) {
+    const byId = /* @__PURE__ */ new Map();
+    for (const [threadId, messages] of this.messageCache.entries()) {
+      let decoded;
+      try {
+        decoded = this.decodeThreadId(threadId);
+      } catch {
+        continue;
+      }
+      if (decoded.chatId !== channelId) {
+        continue;
+      }
+      for (const message of messages) {
+        byId.set(message.id, message);
+      }
+    }
+    const allMessages = [...byId.values()].sort(
+      (a, b) => this.compareMessages(a, b)
+    );
+    return this.paginateMessages(allMessages, options);
+  }
+  async fetchMessage(_threadId, messageId) {
+    return this.findCachedMessage(messageId) ?? null;
+  }
+  async fetchThread(threadId) {
+    const parsedThread = this.resolveThreadId(threadId);
+    const chat = await this.telegramFetch("getChat", {
+      chat_id: parsedThread.chatId
+    });
+    return {
+      id: this.encodeThreadId(parsedThread),
+      channelId: String(chat.id),
+      channelName: this.chatDisplayName(chat),
+      isDM: chat.type === "private",
+      metadata: {
+        chat,
+        messageThreadId: parsedThread.messageThreadId
+      }
+    };
+  }
+  async fetchChannelInfo(channelId) {
+    const chat = await this.telegramFetch("getChat", {
+      chat_id: channelId
+    });
+    let memberCount;
+    try {
+      memberCount = await this.telegramFetch("getChatMemberCount", {
+        chat_id: channelId
+      });
+    } catch {
+      memberCount = void 0;
+    }
+    return {
+      id: String(chat.id),
+      name: this.chatDisplayName(chat),
+      isDM: chat.type === "private",
+      memberCount,
+      metadata: {
+        chat
+      }
+    };
+  }
+  channelIdFromThreadId(threadId) {
+    const { chatId } = this.resolveThreadId(threadId);
+    return `telegram:${chatId}`;
+  }
+  async openDM(userId) {
+    return this.encodeThreadId({ chatId: userId });
+  }
+  isDM(threadId) {
+    const { chatId } = this.resolveThreadId(threadId);
+    return !chatId.startsWith("-");
+  }
+  encodeThreadId(platformData) {
+    if (typeof platformData.messageThreadId === "number") {
+      return `telegram:${platformData.chatId}:${platformData.messageThreadId}`;
+    }
+    return `telegram:${platformData.chatId}`;
+  }
+  decodeThreadId(threadId) {
+    const parts = threadId.split(":");
+    if (parts[0] !== "telegram" || parts.length < 2 || parts.length > 3) {
+      throw new ValidationError2(
+        "telegram",
+        `Invalid Telegram thread ID: ${threadId}`
+      );
+    }
+    const chatId = parts[1];
+    if (!chatId) {
+      throw new ValidationError2(
+        "telegram",
+        `Invalid Telegram thread ID: ${threadId}`
+      );
+    }
+    const messageThreadPart = parts[2];
+    if (!messageThreadPart) {
+      return { chatId };
+    }
+    const messageThreadId = Number.parseInt(messageThreadPart, 10);
+    if (!Number.isFinite(messageThreadId)) {
+      throw new ValidationError2(
+        "telegram",
+        `Invalid Telegram thread topic ID in thread ID: ${threadId}`
+      );
+    }
+    return {
+      chatId,
+      messageThreadId
+    };
+  }
+  parseMessage(raw) {
+    const threadId = this.encodeThreadId({
+      chatId: String(raw.chat.id),
+      messageThreadId: raw.message_thread_id
+    });
+    const message = this.parseTelegramMessage(raw, threadId);
+    this.cacheMessage(message);
+    return message;
+  }
+  renderFormatted(content) {
+    return this.formatConverter.fromAst(content);
+  }
+  parseTelegramMessage(raw, threadId) {
+    const plainText = raw.text ?? raw.caption ?? "";
+    const entities = raw.entities ?? raw.caption_entities ?? [];
+    const text = applyTelegramEntities(plainText, entities);
+    let author;
+    if (raw.from) {
+      author = this.toAuthor(raw.from);
+    } else if (raw.sender_chat) {
+      author = this.toReactionActorAuthor(raw.sender_chat);
+    } else {
+      const fallbackName = this.chatDisplayName(raw.chat) ?? String(raw.chat.id);
+      author = {
+        userId: String(raw.chat.id),
+        userName: fallbackName,
+        fullName: fallbackName,
+        isBot: "unknown",
+        isMe: false
+      };
+    }
+    const message = new Message({
+      id: this.encodeMessageId(String(raw.chat.id), raw.message_id),
+      threadId,
+      text,
+      formatted: this.formatConverter.toAst(text),
+      raw,
+      author,
+      metadata: {
+        dateSent: new Date(raw.date * 1e3),
+        edited: raw.edit_date !== void 0,
+        editedAt: raw.edit_date !== void 0 ? new Date(raw.edit_date * 1e3) : void 0
+      },
+      attachments: this.extractAttachments(raw),
+      isMention: this.isBotMentioned(raw, plainText)
+    });
+    return message;
+  }
+  extractAttachments(raw) {
+    const attachments = [];
+    const photo = raw.photo?.at(-1);
+    if (photo) {
+      attachments.push(
+        this.createAttachment("image", photo.file_id, {
+          size: photo.file_size,
+          width: photo.width,
+          height: photo.height
+        })
+      );
+    }
+    if (raw.video) {
+      attachments.push(
+        this.createAttachment("video", raw.video.file_id, {
+          size: raw.video.file_size,
+          width: raw.video.width,
+          height: raw.video.height,
+          name: raw.video.file_name,
+          mimeType: raw.video.mime_type
+        })
+      );
+    }
+    if (raw.audio) {
+      attachments.push(
+        this.createAttachment("audio", raw.audio.file_id, {
+          size: raw.audio.file_size,
+          name: raw.audio.file_name,
+          mimeType: raw.audio.mime_type
+        })
+      );
+    }
+    if (raw.voice) {
+      attachments.push(
+        this.createAttachment("audio", raw.voice.file_id, {
+          size: raw.voice.file_size,
+          mimeType: raw.voice.mime_type
+        })
+      );
+    }
+    if (raw.document) {
+      attachments.push(
+        this.createAttachment("file", raw.document.file_id, {
+          size: raw.document.file_size,
+          name: raw.document.file_name,
+          mimeType: raw.document.mime_type
+        })
+      );
+    }
+    if (raw.video_note) {
+      attachments.push(
+        this.createAttachment("video", raw.video_note.file_id, {
+          size: raw.video_note.file_size,
+          width: raw.video_note.length,
+          height: raw.video_note.length
+        })
+      );
+    }
+    return attachments;
+  }
+  createAttachment(type, fileId, metadata) {
+    return {
+      type,
+      size: metadata?.size,
+      width: metadata?.width,
+      height: metadata?.height,
+      name: metadata?.name,
+      mimeType: metadata?.mimeType,
+      fetchMetadata: { fileId },
+      fetchData: async () => this.downloadFile(fileId)
+    };
+  }
+  rehydrateAttachment(attachment) {
+    const fileId = attachment.fetchMetadata?.fileId;
+    if (!fileId) {
+      return attachment;
+    }
+    return {
+      ...attachment,
+      fetchData: async () => this.downloadFile(fileId)
+    };
+  }
+  async downloadFile(fileId) {
+    const file = await this.telegramFetch("getFile", {
+      file_id: fileId
+    });
+    if (!file.file_path) {
+      throw new ResourceNotFoundError("telegram", "file", fileId);
+    }
+    const fileUrl = `${this.apiBaseUrl}/file/bot${this.botToken}/${file.file_path}`;
+    let response;
+    try {
+      response = await fetch(fileUrl);
+    } catch (error) {
+      throw new NetworkError(
+        "telegram",
+        `Failed to download Telegram file ${fileId}`,
+        error instanceof Error ? error : void 0
+      );
+    }
+    if (!response.ok) {
+      throw new NetworkError(
+        "telegram",
+        `Failed to download Telegram file ${fileId}: ${response.status}`
+      );
+    }
+    return Buffer.from(await response.arrayBuffer());
+  }
+  async sendDocument(thread, file, text, replyMarkup, parseMode = "plain") {
+    const buffer = await this.toTelegramBuffer(file.data);
+    const formData = new FormData();
+    formData.append("chat_id", thread.chatId);
+    if (typeof thread.messageThreadId === "number") {
+      formData.append("message_thread_id", String(thread.messageThreadId));
+    }
+    if (text.trim()) {
+      formData.append(
+        "caption",
+        truncateForTelegram(text, TELEGRAM_CAPTION_LIMIT, parseMode)
+      );
+      const botApiParseMode = toBotApiParseMode(parseMode);
+      if (botApiParseMode) {
+        formData.append("parse_mode", botApiParseMode);
+      }
+    }
+    const blob = new Blob([new Uint8Array(buffer)], {
+      type: file.mimeType ?? "application/octet-stream"
+    });
+    formData.append("document", blob, file.filename);
+    if (replyMarkup) {
+      formData.append("reply_markup", JSON.stringify(replyMarkup));
+    }
+    return this.telegramFetch("sendDocument", formData);
+  }
+  async sendAttachment(thread, attachment, text, replyMarkup, parseMode = "plain") {
+    const upload = ATTACHMENT_UPLOADS[attachment.type];
+    const data = attachment.data ?? (attachment.fetchData ? await attachment.fetchData() : void 0);
+    if (!(data || attachment.url)) {
+      throw new ValidationError2(
+        "telegram",
+        `Attachment data or URL required for ${attachment.type}`
+      );
+    }
+    if (!data) {
+      const payload = {
+        chat_id: thread.chatId,
+        [upload.field]: attachment.url
+      };
+      if (typeof thread.messageThreadId === "number") {
+        payload.message_thread_id = thread.messageThreadId;
+      }
+      if (text.trim()) {
+        payload.caption = truncateForTelegram(
+          text,
+          TELEGRAM_CAPTION_LIMIT,
+          parseMode
+        );
+        const botApiParseMode = toBotApiParseMode(parseMode);
+        if (botApiParseMode) {
+          payload.parse_mode = botApiParseMode;
+        }
+      }
+      if (attachment.type === "video") {
+        if (Number.isInteger(attachment.width)) {
+          payload.width = attachment.width;
+        }
+        if (Number.isInteger(attachment.height)) {
+          payload.height = attachment.height;
+        }
+      }
+      if (replyMarkup) {
+        payload.reply_markup = replyMarkup;
+      }
+      return this.telegramFetch(upload.method, payload);
+    }
+    const buffer = await this.toTelegramBuffer(data);
+    const formData = new FormData();
+    formData.append("chat_id", thread.chatId);
+    if (typeof thread.messageThreadId === "number") {
+      formData.append("message_thread_id", String(thread.messageThreadId));
+    }
+    if (text.trim()) {
+      formData.append(
+        "caption",
+        truncateForTelegram(text, TELEGRAM_CAPTION_LIMIT, parseMode)
+      );
+      const botApiParseMode = toBotApiParseMode(parseMode);
+      if (botApiParseMode) {
+        formData.append("parse_mode", botApiParseMode);
+      }
+    }
+    if (attachment.type === "video") {
+      if (Number.isInteger(attachment.width)) {
+        formData.append("width", String(attachment.width));
+      }
+      if (Number.isInteger(attachment.height)) {
+        formData.append("height", String(attachment.height));
+      }
+    }
+    const blob = new Blob([new Uint8Array(buffer)], {
+      type: attachment.mimeType ?? "application/octet-stream"
+    });
+    formData.append(upload.field, blob, attachment.name ?? "attachment");
+    if (replyMarkup) {
+      formData.append("reply_markup", JSON.stringify(replyMarkup));
+    }
+    return this.telegramFetch(upload.method, formData);
+  }
+  async toTelegramBuffer(data) {
+    if (Buffer.isBuffer(data)) {
+      return data;
+    }
+    if (data instanceof ArrayBuffer) {
+      return Buffer.from(data);
+    }
+    if (data instanceof Blob) {
+      return Buffer.from(await data.arrayBuffer());
+    }
+    throw new ValidationError2("telegram", "Unsupported file data type");
+  }
+  paginateMessages(messages, options) {
+    const limit = Math.max(1, Math.min(options.limit ?? 50, 100));
+    const direction = options.direction ?? "backward";
+    if (messages.length === 0) {
+      return { messages: [] };
+    }
+    const messageIndexById = new Map(
+      messages.map((message, index) => [message.id, index])
+    );
+    if (direction === "backward") {
+      const end2 = options.cursor && messageIndexById.has(options.cursor) ? messageIndexById.get(options.cursor) ?? messages.length : messages.length;
+      const start2 = Math.max(0, end2 - limit);
+      const page2 = messages.slice(start2, end2);
+      return {
+        messages: page2,
+        nextCursor: start2 > 0 ? page2[0]?.id : void 0
+      };
+    }
+    const start = options.cursor && messageIndexById.has(options.cursor) ? (messageIndexById.get(options.cursor) ?? -1) + 1 : 0;
+    const end = Math.min(messages.length, start + limit);
+    const page = messages.slice(start, end);
+    return {
+      messages: page,
+      nextCursor: end < messages.length ? page.at(-1)?.id : void 0
+    };
+  }
+  cacheMessage(message) {
+    const existing = this.messageCache.get(message.threadId) ?? [];
+    const index = existing.findIndex((item) => item.id === message.id);
+    if (index >= 0) {
+      existing[index] = message;
+    } else {
+      existing.push(message);
+    }
+    existing.sort((a, b) => this.compareMessages(a, b));
+    this.messageCache.set(message.threadId, existing);
+  }
+  findCachedMessage(messageId) {
+    for (const messages of this.messageCache.values()) {
+      const found = messages.find((message) => message.id === messageId);
+      if (found) {
+        return found;
+      }
+    }
+    return void 0;
+  }
+  deleteCachedMessage(messageId) {
+    for (const [threadId, messages] of this.messageCache.entries()) {
+      const filtered = messages.filter((message) => message.id !== messageId);
+      if (filtered.length === 0) {
+        this.messageCache.delete(threadId);
+      } else if (filtered.length !== messages.length) {
+        this.messageCache.set(threadId, filtered);
+      }
+    }
+  }
+  compareMessages(a, b) {
+    const timeDiff = a.metadata.dateSent.getTime() - b.metadata.dateSent.getTime();
+    if (timeDiff !== 0) {
+      return timeDiff;
+    }
+    return this.messageSequence(a.id) - this.messageSequence(b.id);
+  }
+  messageSequence(messageId) {
+    const match = messageId.match(MESSAGE_SEQUENCE_PATTERN);
+    return match ? Number.parseInt(match[1], 10) : 0;
+  }
+  resolveThreadId(value) {
+    if (value.startsWith("telegram:")) {
+      return this.decodeThreadId(value);
+    }
+    return { chatId: value };
+  }
+  encodeMessageId(chatId, messageId) {
+    return `${chatId}:${messageId}`;
+  }
+  decodeCompositeMessageId(messageId, expectedChatId) {
+    const compositeMatch = messageId.match(MESSAGE_ID_PATTERN);
+    if (compositeMatch) {
+      const [, chatId, rawMessageId] = compositeMatch;
+      const parsedMessageId2 = Number.parseInt(rawMessageId, 10);
+      if (expectedChatId && chatId !== expectedChatId) {
+        throw new ValidationError2(
+          "telegram",
+          `Message ID chat mismatch: expected ${expectedChatId}, got ${chatId}`
+        );
+      }
+      return {
+        chatId,
+        messageId: parsedMessageId2,
+        compositeId: `${chatId}:${parsedMessageId2}`
+      };
+    }
+    if (!expectedChatId) {
+      throw new ValidationError2(
+        "telegram",
+        `Telegram message ID must be in <chatId>:<messageId> format, got: ${messageId}`
+      );
+    }
+    const parsedMessageId = Number.parseInt(messageId, 10);
+    if (!Number.isFinite(parsedMessageId)) {
+      throw new ValidationError2(
+        "telegram",
+        `Invalid Telegram message ID: ${messageId}`
+      );
+    }
+    return {
+      chatId: expectedChatId,
+      messageId: parsedMessageId,
+      compositeId: `${expectedChatId}:${parsedMessageId}`
+    };
+  }
+  toAuthor(user) {
+    const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+    return {
+      userId: String(user.id),
+      userName: user.username ?? user.first_name ?? String(user.id),
+      fullName: fullName || user.username || String(user.id),
+      isBot: user.is_bot,
+      isMe: String(user.id) === this._botUserId
+    };
+  }
+  toReactionActorAuthor(chat) {
+    const name = this.chatDisplayName(chat) ?? String(chat.id);
+    return {
+      userId: `chat:${chat.id}`,
+      userName: name,
+      fullName: name,
+      isBot: "unknown",
+      isMe: false
+    };
+  }
+  chatDisplayName(chat) {
+    if (chat.title) {
+      return chat.title;
+    }
+    const privateName = [chat.first_name, chat.last_name].filter(Boolean).join(" ").trim();
+    if (privateName) {
+      return privateName;
+    }
+    return chat.username;
+  }
+  isBotMentioned(message, text) {
+    if (!text) {
+      return false;
+    }
+    const username = this._userName;
+    const entities = message.entities ?? message.caption_entities ?? [];
+    for (const entity of entities) {
+      if (entity.type === "mention") {
+        const mentionText = this.entityText(text, entity);
+        if (mentionText.toLowerCase() === `@${username.toLowerCase()}`) {
+          return true;
+        }
+      }
+      if (entity.type === "text_mention" && entity.user && this._botUserId && String(entity.user.id) === this._botUserId) {
+        return true;
+      }
+      if (entity.type === "bot_command") {
+        const commandText = this.entityText(text, entity);
+        if (commandText.toLowerCase().endsWith(`@${username.toLowerCase()}`)) {
+          return true;
+        }
+      }
+    }
+    const mentionRegex = new RegExp(`@${this.escapeRegex(username)}\\b`, "i");
+    return mentionRegex.test(text);
+  }
+  entityText(text, entity) {
+    return text.slice(entity.offset, entity.offset + entity.length);
+  }
+  escapeRegex(input) {
+    return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  normalizeUserName(value) {
+    if (typeof value !== "string") {
+      return "bot";
+    }
+    return value.replace(LEADING_AT_PATTERN, "").trim() || "bot";
+  }
+  resolveParseMode(message, card) {
+    if (card) {
+      return "MarkdownV2";
+    }
+    if (typeof message === "string") {
+      return "plain";
+    }
+    if (typeof message === "object" && message !== null && "raw" in message) {
+      return "plain";
+    }
+    return "MarkdownV2";
+  }
+  toTelegramReaction(emoji) {
+    if (typeof emoji !== "string") {
+      return {
+        type: "emoji",
+        emoji: defaultEmojiResolver.toGChat(emoji.name)
+      };
+    }
+    if (emoji.startsWith("custom:")) {
+      return {
+        type: "custom_emoji",
+        custom_emoji_id: emoji.slice("custom:".length)
+      };
+    }
+    const placeholderMatch = emoji.match(EMOJI_PLACEHOLDER_PATTERN);
+    if (placeholderMatch) {
+      return {
+        type: "emoji",
+        emoji: defaultEmojiResolver.toGChat(placeholderMatch[1])
+      };
+    }
+    if (EMOJI_NAME_PATTERN.test(emoji)) {
+      return {
+        type: "emoji",
+        emoji: defaultEmojiResolver.toGChat(emoji.toLowerCase())
+      };
+    }
+    return {
+      type: "emoji",
+      emoji
+    };
+  }
+  reactionKey(reaction) {
+    if (reaction.type === "emoji") {
+      return reaction.emoji;
+    }
+    return `custom:${reaction.custom_emoji_id}`;
+  }
+  reactionToEmojiValue(reaction) {
+    if (reaction.type === "emoji") {
+      return defaultEmojiResolver.fromGChat(reaction.emoji);
+    }
+    return getEmoji(`custom:${reaction.custom_emoji_id}`);
+  }
+  async pollingLoop(config) {
+    let offset;
+    let consecutiveFailures = 0;
+    const MAX_BACKOFF_MS = 3e4;
+    while (this.pollingActive) {
+      this.pollingAbortController = new AbortController();
+      try {
+        const updates = await this.telegramFetch(
+          "getUpdates",
+          {
+            allowed_updates: config.allowedUpdates,
+            limit: config.limit,
+            offset,
+            timeout: config.timeout
+          },
+          { signal: this.pollingAbortController.signal }
+        );
+        consecutiveFailures = 0;
+        for (const update of updates) {
+          offset = update.update_id + 1;
+          try {
+            this.processUpdate(update);
+          } catch (error) {
+            this.logger.warn("Failed to process Telegram polled update", {
+              error: String(error),
+              updateId: update.update_id
+            });
+          }
+        }
+      } catch (error) {
+        if (this.isAbortError(error)) {
+          return;
+        }
+        consecutiveFailures++;
+        const backoffMs = Math.min(
+          config.retryDelayMs * 2 ** (consecutiveFailures - 1),
+          MAX_BACKOFF_MS
+        );
+        this.logger.warn("Telegram polling request failed", {
+          error: String(error),
+          retryDelayMs: backoffMs,
+          consecutiveFailures
+        });
+        if (!this.pollingActive) {
+          return;
+        }
+        await this.sleep(backoffMs);
+      } finally {
+        this.pollingAbortController = null;
+      }
+    }
+  }
+  resolvePollingConfig(override) {
+    const baseConfig = this.longPolling ?? {};
+    const merged = {
+      ...baseConfig,
+      ...override
+    };
+    return {
+      allowedUpdates: merged.allowedUpdates && merged.allowedUpdates.length > 0 ? [...merged.allowedUpdates] : void 0,
+      deleteWebhook: merged.deleteWebhook ?? true,
+      dropPendingUpdates: merged.dropPendingUpdates ?? false,
+      limit: this.clampInteger(
+        merged.limit,
+        TELEGRAM_DEFAULT_POLLING_LIMIT,
+        TELEGRAM_MIN_POLLING_LIMIT,
+        TELEGRAM_MAX_POLLING_LIMIT
+      ),
+      retryDelayMs: this.clampInteger(
+        merged.retryDelayMs,
+        TELEGRAM_DEFAULT_POLLING_RETRY_DELAY_MS,
+        0,
+        Number.MAX_SAFE_INTEGER
+      ),
+      timeout: this.clampInteger(
+        merged.timeout,
+        TELEGRAM_DEFAULT_POLLING_TIMEOUT_SECONDS,
+        TELEGRAM_MIN_POLLING_TIMEOUT_SECONDS,
+        TELEGRAM_MAX_POLLING_TIMEOUT_SECONDS
+      )
+    };
+  }
+  clampInteger(value, fallback, min, max) {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return fallback;
+    }
+    const parsed = Math.trunc(value);
+    return Math.max(min, Math.min(max, parsed));
+  }
+  isAbortError(error) {
+    return error instanceof Error && error.name === "AbortError";
+  }
+  async sleep(delayMs) {
+    if (delayMs <= 0) {
+      return;
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, delayMs);
+    });
+  }
+  async telegramFetch(method, payload, request) {
+    const url = `${this.apiBaseUrl}/bot${this.botToken}/${method}`;
+    let response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: payload instanceof FormData ? void 0 : {
+          "Content-Type": "application/json"
+        },
+        body: payload instanceof FormData ? payload : JSON.stringify(payload ?? {}),
+        signal: request?.signal
+      });
+    } catch (error) {
+      if (this.isAbortError(error)) {
+        throw error;
+      }
+      throw new NetworkError(
+        "telegram",
+        `Network error calling Telegram ${method}`,
+        error instanceof Error ? error : void 0
+      );
+    }
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new NetworkError(
+        "telegram",
+        `Failed to parse Telegram API response for ${method}`
+      );
+    }
+    if (!(response.ok && data.ok)) {
+      this.throwTelegramApiError(method, response.status, data);
+    }
+    if (typeof data.result === "undefined") {
+      throw new NetworkError(
+        "telegram",
+        `Telegram API ${method} returned no result`
+      );
+    }
+    return data.result;
+  }
+  throwTelegramApiError(method, status, data) {
+    const errorCode = data.error_code ?? status;
+    const description = data.description ?? `Telegram API ${method} failed`;
+    if (errorCode === 429) {
+      throw new AdapterRateLimitError("telegram", data.parameters?.retry_after);
+    }
+    if (errorCode === 401) {
+      throw new AuthenticationError("telegram", description);
+    }
+    if (errorCode === 403) {
+      throw new PermissionError("telegram", method);
+    }
+    if (errorCode === 404) {
+      throw new ResourceNotFoundError("telegram", method);
+    }
+    if (errorCode >= 400 && errorCode < 500) {
+      throw new ValidationError2("telegram", description);
+    }
+    throw new NetworkError(
+      "telegram",
+      `${description} (status ${status}, error ${errorCode})`
+    );
+  }
+};
+function createTelegramAdapter(config) {
+  return new TelegramAdapter(config ?? {});
+}
+export {
+  TelegramAdapter,
+  TelegramFormatConverter,
+  applyTelegramEntities,
+  createTelegramAdapter,
+  escapeMarkdownV2
+};

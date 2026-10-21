@@ -1,0 +1,8 @@
+import type { OpenAPIV3 } from 'openapi-types';
+import type { DateTimeType } from './config.js';
+import type { ParsedSpec } from './types.js';
+export interface ParseOptions {
+    /** As `GeneratorConfig.dateTimeType`; shapes inline request bodies. Default: `'Date'`. */
+    dateTimeType?: DateTimeType;
+}
+export declare function parseOpenApiSpec(spec: OpenAPIV3.Document, options?: ParseOptions): ParsedSpec;

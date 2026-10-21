@@ -1,0 +1,623 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { BaseFormatConverter, AdapterPostableMessage, Root, Logger, CardElement, Adapter, ChatInstance, UserInfo, WebhookOptions, RawMessage, EmojiValue, FetchOptions, FetchResult, ThreadInfo, Message, FormattedContent, ListThreadsOptions, ListThreadsResult, ChannelInfo } from 'chat';
+import { Interaction, ChatInputCommandInteraction, MessageComponentInteraction, User, Client, Message as Message$1 } from 'discord.js';
+import { ButtonStyle, APIEmbed, ChannelType, APIMessage, InteractionType } from 'discord-api-types/v10';
+
+/**
+ * Discord-specific format conversion using AST-based parsing.
+ *
+ * Discord uses standard markdown with some extensions:
+ * - Bold: **text** (standard)
+ * - Italic: *text* or _text_ (standard)
+ * - Strikethrough: ~~text~~ (standard GFM)
+ * - Links: [text](url) (standard)
+ * - User mentions: <@userId>
+ * - Channel mentions: <#channelId>
+ * - Role mentions: <@&roleId>
+ * - Custom emoji: <:name:id> or <a:name:id> (animated)
+ * - Spoiler: ||text||
+ */
+
+declare class DiscordFormatConverter extends BaseFormatConverter {
+    /**
+     * Convert @mentions to Discord format in plain text.
+     * @name → <@name>
+     */
+    private convertMentionsToDiscord;
+    /**
+     * Override renderPostable to convert @mentions in plain strings.
+     */
+    renderPostable(message: AdapterPostableMessage): string;
+    /**
+     * Render an AST to Discord markdown format.
+     */
+    fromAst(ast: Root): string;
+    /**
+     * Parse Discord markdown into an AST.
+     */
+    toAst(discordMarkdown: string): Root;
+    private nodeToDiscordMarkdown;
+}
+
+/**
+ * Discord adapter types.
+ */
+
+/**
+ * Discord adapter configuration.
+ */
+interface DiscordAdapterConfig {
+    /** Override the Discord API base URL. Defaults to DISCORD_API_URL env var or "https://discord.com/api/v10". */
+    apiUrl?: string;
+    /** Discord application ID. Defaults to DISCORD_APPLICATION_ID env var. */
+    applicationId?: string;
+    /** Discord bot token. Defaults to DISCORD_BOT_TOKEN env var. */
+    botToken?: string;
+    /** Logger instance for error reporting. Defaults to ConsoleLogger. */
+    logger?: Logger;
+    /** Role IDs that should trigger mention handlers (in addition to direct user mentions). Defaults to DISCORD_MENTION_ROLE_IDS env var (comma-separated). */
+    mentionRoleIds?: string[];
+    /** Discord application public key for webhook signature verification. Defaults to DISCORD_PUBLIC_KEY env var. */
+    publicKey?: string;
+    /** Override bot username (optional) */
+    userName?: string;
+}
+/**
+ * Discord thread ID components.
+ * Used for encoding/decoding thread IDs.
+ */
+interface DiscordThreadId {
+    /** Channel ID */
+    channelId: string;
+    /** Guild ID, or "@me" for DMs */
+    guildId: string;
+    /** Thread ID (if message is in a thread) */
+    threadId?: string;
+}
+/**
+ * Per-request slash command context used while resolving deferred responses.
+ */
+interface DiscordSlashCommandContext {
+    channelId: string;
+    initialResponseSent: boolean;
+    interactionToken: string;
+}
+/**
+ * Async request context for Discord webhook handling.
+ */
+interface DiscordRequestContext {
+    slashCommand?: DiscordSlashCommandContext;
+}
+/**
+ * Incoming Discord interaction from webhook.
+ */
+interface DiscordInteraction {
+    application_id: string;
+    channel?: {
+        id: string;
+        type: ChannelType;
+        name?: string;
+        /** Parent channel ID (present when channel is a thread) */
+        parent_id?: string;
+    };
+    channel_id?: string;
+    data?: DiscordInteractionData;
+    guild_id?: string;
+    id: string;
+    member?: {
+        user: DiscordUser;
+        nick?: string;
+        roles: string[];
+        joined_at: string;
+    };
+    message?: APIMessage;
+    token: string;
+    type: InteractionType;
+    user?: DiscordUser;
+    version: number;
+}
+/**
+ * Discord user object.
+ */
+interface DiscordUser {
+    avatar?: string;
+    bot?: boolean;
+    discriminator: string;
+    global_name?: string;
+    id: string;
+    username: string;
+}
+/**
+ * Discord interaction data (for components/commands).
+ */
+interface DiscordInteractionData {
+    component_type?: number;
+    custom_id?: string;
+    name?: string;
+    options?: DiscordCommandOption[];
+    type?: number;
+    values?: string[];
+}
+/**
+ * Discord command option.
+ */
+interface DiscordCommandOption {
+    name: string;
+    options?: DiscordCommandOption[];
+    type: number;
+    value?: string | number | boolean;
+}
+/**
+ * Discord emoji.
+ */
+interface DiscordEmoji {
+    animated?: boolean;
+    id?: string;
+    name: string;
+}
+/**
+ * Discord button component.
+ */
+interface DiscordButton {
+    custom_id?: string;
+    disabled?: boolean;
+    emoji?: DiscordEmoji;
+    label?: string;
+    style: ButtonStyle;
+    type: 2;
+    url?: string;
+}
+/**
+ * Discord action row component.
+ */
+interface DiscordActionRow {
+    components: DiscordButton[];
+    type: 1;
+}
+/**
+ * Discord message create payload.
+ */
+interface DiscordMessagePayload {
+    allowed_mentions?: {
+        parse?: ("roles" | "users" | "everyone")[];
+        roles?: string[];
+        users?: string[];
+        replied_user?: boolean;
+    };
+    attachments?: {
+        id: string;
+        filename: string;
+        description?: string;
+    }[];
+    components?: DiscordActionRow[];
+    content?: string;
+    embeds?: APIEmbed[];
+    message_reference?: {
+        message_id: string;
+        fail_if_not_exists?: boolean;
+    };
+}
+/**
+ * Discord interaction response types.
+ * Note: Only the types currently used are defined here.
+ * Additional types: ChannelMessageWithSource (4), UpdateMessage (7)
+ */
+declare const InteractionResponseType: {
+    /** ACK and edit later (deferred) */
+    readonly DeferredChannelMessageWithSource: 5;
+    /** ACK component interaction, update message later */
+    readonly DeferredUpdateMessage: 6;
+};
+type InteractionResponseType = (typeof InteractionResponseType)[keyof typeof InteractionResponseType];
+/**
+ * Discord interaction response.
+ */
+interface DiscordInteractionResponse {
+    data?: DiscordMessagePayload;
+    type: InteractionResponseType;
+}
+/**
+ * Known Gateway event types that have specific handlers.
+ * Other event types are still forwarded but processed generically.
+ */
+type DiscordGatewayEventType = "GATEWAY_MESSAGE_CREATE" | "GATEWAY_MESSAGE_REACTION_ADD" | "GATEWAY_MESSAGE_REACTION_REMOVE" | `GATEWAY_${string}`;
+/**
+ * A Gateway event forwarded to the webhook endpoint.
+ * All Gateway events are forwarded, even ones without specific handlers.
+ */
+interface DiscordForwardedEvent {
+    /** Event-specific data - structure varies by event type */
+    data: DiscordGatewayMessageData | DiscordGatewayReactionData | unknown;
+    /** Unix timestamp when the event was received */
+    timestamp: number;
+    /** Event type identifier (prefixed with GATEWAY_) */
+    type: DiscordGatewayEventType;
+}
+/**
+ * Message data from a MESSAGE_CREATE Gateway event.
+ */
+interface DiscordGatewayMessageData {
+    /** File attachments */
+    attachments: Array<{
+        id: string;
+        url: string;
+        filename: string;
+        content_type?: string;
+        size: number;
+    }>;
+    /** Message author */
+    author: {
+        id: string;
+        username: string;
+        global_name?: string;
+        bot: boolean;
+    };
+    /** Channel where the message was sent */
+    channel_id: string;
+    /** Channel type (11 = public thread, 12 = private thread) */
+    channel_type?: number;
+    /** Message content */
+    content: string;
+    /** Guild ID, or null for DMs */
+    guild_id: string | null;
+    /** Message ID */
+    id: string;
+    /** Whether the bot was mentioned */
+    is_mention?: boolean;
+    /** Role IDs mentioned in the message */
+    mention_roles?: string[];
+    /** Users mentioned in the message */
+    mentions: Array<{
+        id: string;
+        username: string;
+    }>;
+    /** Thread info if message is in a thread */
+    thread?: {
+        id: string;
+        parent_id: string;
+    };
+    /** ISO timestamp */
+    timestamp: string;
+}
+/**
+ * Reaction data from REACTION_ADD or REACTION_REMOVE Gateway events.
+ */
+interface DiscordGatewayReactionData {
+    /** Channel containing the message */
+    channel_id: string;
+    /** Channel type (11 = public thread, 12 = private thread) */
+    channel_type?: number;
+    /** Emoji used for the reaction */
+    emoji: {
+        name: string | null;
+        id: string | null;
+    };
+    /** Guild ID, or null for DMs */
+    guild_id: string | null;
+    /** Member details (for guild reactions) */
+    member?: {
+        user: {
+            id: string;
+            username: string;
+            global_name?: string;
+            bot?: boolean;
+        };
+    };
+    /** ID of the message that was reacted to */
+    message_id: string;
+    /** User details (for DMs) */
+    user?: {
+        id: string;
+        username: string;
+        bot?: boolean;
+    };
+    /** User who added/removed the reaction */
+    user_id: string;
+}
+
+/**
+ * Discord Embed and Component converter for cross-platform cards.
+ *
+ * Converts CardElement to Discord Embeds and Action Row Components.
+ * @see https://discord.com/developers/docs/resources/message#embed-object
+ * @see https://discord.com/developers/docs/interactions/message-components
+ */
+
+declare function encodeDiscordCustomId(actionId: string, value?: string): string;
+declare function decodeDiscordCustomId(customId: string): {
+    actionId: string;
+    value: string | undefined;
+};
+/**
+ * Convert a CardElement to Discord message payload (embeds + components).
+ */
+declare function cardToDiscordPayload(card: CardElement): {
+    embeds: APIEmbed[];
+    components: DiscordActionRow[];
+};
+/**
+ * Generate fallback text from a card element.
+ * Used when embeds aren't supported or for notifications.
+ */
+declare function cardToFallbackText(card: CardElement): string;
+
+/**
+ * Discord adapter for chat-sdk.
+ *
+ * Uses Discord's HTTP Interactions API (not Gateway WebSocket) for
+ * serverless compatibility. Webhook signature verification uses Ed25519.
+ */
+
+interface GatewayCommandOption {
+    name: string;
+    options?: readonly GatewayCommandOption[];
+    type: number;
+    value?: boolean | number | string;
+}
+declare class DiscordAdapter implements Adapter<DiscordThreadId, unknown> {
+    readonly name = "discord";
+    readonly userName: string;
+    readonly botUserId?: string;
+    protected readonly apiBaseUrl: string;
+    protected readonly botToken: string;
+    protected readonly publicKey: string;
+    protected readonly applicationId: string;
+    protected readonly mentionRoleIds: string[];
+    protected chat: ChatInstance | null;
+    protected readonly logger: Logger;
+    protected readonly formatConverter: DiscordFormatConverter;
+    protected readonly requestContext: AsyncLocalStorage<DiscordRequestContext>;
+    private readonly threadParentCache;
+    protected static readonly THREAD_PARENT_CACHE_TTL: number;
+    constructor(config?: DiscordAdapterConfig);
+    initialize(chat: ChatInstance): Promise<void>;
+    getUser(userId: string): Promise<UserInfo | null>;
+    /**
+     * Handle incoming Discord webhook (HTTP Interactions or forwarded Gateway events).
+     */
+    handleWebhook(request: Request, options?: WebhookOptions): Promise<Response>;
+    /**
+     * Verify Discord's Ed25519 signature using official discord-interactions library.
+     */
+    protected verifySignature(bodyBytes: Uint8Array, signature: string | null, timestamp: string | null): Promise<boolean>;
+    /**
+     * Create a JSON response for Discord interactions.
+     */
+    protected respondToInteraction(response: DiscordInteractionResponse): Response;
+    /**
+     * Handle MESSAGE_COMPONENT interactions (button clicks).
+     */
+    protected handleComponentInteraction(interaction: DiscordInteraction, options?: WebhookOptions): void;
+    /**
+     * Handle APPLICATION_COMMAND interactions (slash commands).
+     */
+    protected handleApplicationCommandInteraction(interaction: DiscordInteraction, options?: WebhookOptions): void;
+    /**
+     * Parse a Discord slash command into a full command path and flat text.
+     *
+     * Subcommand and subcommand-group names are appended to the command path
+     * so `/project issue create --title="Login fails"` becomes:
+     *   command = "/project issue create"
+     *   text    = "Login fails"
+     *
+     * Leaf option values are flattened into `text`. Consumers needing the full
+     * option tree (names, types) can use `event.raw`.
+     */
+    protected parseSlashCommand(name: string, options?: DiscordCommandOption[]): {
+        command: string;
+        text: string;
+    };
+    protected handleGatewayInteraction(interaction: Interaction): Promise<void>;
+    protected normalizeGatewaySlashCommandInteraction(interaction: ChatInputCommandInteraction): DiscordInteraction;
+    protected normalizeGatewayComponentInteraction(interaction: MessageComponentInteraction): DiscordInteraction;
+    protected normalizeGatewayChannel(interaction: ChatInputCommandInteraction | MessageComponentInteraction): DiscordInteraction["channel"];
+    protected normalizeGatewayCommandOptions(options: readonly GatewayCommandOption[]): DiscordCommandOption[];
+    protected normalizeGatewayUser(user: User): DiscordUser;
+    /**
+     * Handle a forwarded Gateway event received via webhook.
+     */
+    protected handleForwardedGatewayEvent(event: DiscordForwardedEvent, options?: WebhookOptions): Promise<Response>;
+    /**
+     * Handle a forwarded MESSAGE_CREATE event.
+     */
+    protected handleForwardedMessage(data: DiscordGatewayMessageData, _options?: WebhookOptions): Promise<void>;
+    /**
+     * Handle a forwarded REACTION_ADD or REACTION_REMOVE event.
+     */
+    protected handleForwardedReaction(data: DiscordGatewayReactionData, added: boolean, _options?: WebhookOptions): Promise<void>;
+    /**
+     * Post a message to a Discord channel or thread.
+     */
+    postMessage(threadId: string, message: AdapterPostableMessage): Promise<RawMessage<unknown>>;
+    protected tryPostSlashResponse(threadId: string, payload: DiscordMessagePayload, files: Array<{
+        filename: string;
+        data: Buffer | Blob | ArrayBuffer;
+        mimeType?: string;
+    }>): Promise<RawMessage<unknown>> | undefined;
+    protected postSlashCommandResponse(slashContext: DiscordSlashCommandContext, threadId: string, payload: DiscordMessagePayload, files: Array<{
+        filename: string;
+        data: Buffer | Blob | ArrayBuffer;
+        mimeType?: string;
+    }>): Promise<RawMessage<unknown>>;
+    /**
+     * Create a Discord thread from a message.
+     */
+    protected createDiscordThread(channelId: string, messageId: string): Promise<{
+        id: string;
+        name: string;
+    }>;
+    /**
+     * Truncate content to Discord's maximum length.
+     */
+    protected truncateContent(content: string): string;
+    /**
+     * Post a message with file attachments.
+     */
+    protected postMessageWithFiles(channelId: string, threadId: string, payload: DiscordMessagePayload, files: Array<{
+        filename: string;
+        data: Buffer | Blob | ArrayBuffer;
+        mimeType?: string;
+    }>): Promise<RawMessage<unknown>>;
+    protected discordInteractionFetch(path: string, method: string, body?: unknown): Promise<Response>;
+    protected discordInteractionFetchWithFiles(path: string, method: string, payload: DiscordMessagePayload, files: Array<{
+        filename: string;
+        data: Buffer | Blob | ArrayBuffer;
+        mimeType?: string;
+    }>): Promise<Response>;
+    /**
+     * Edit an existing Discord message.
+     */
+    editMessage(threadId: string, messageId: string, message: AdapterPostableMessage): Promise<RawMessage<unknown>>;
+    /**
+     * Delete a Discord message.
+     */
+    deleteMessage(threadId: string, messageId: string): Promise<void>;
+    /**
+     * Add a reaction to a Discord message.
+     */
+    addReaction(threadId: string, messageId: string, emoji: EmojiValue | string): Promise<void>;
+    /**
+     * Remove a reaction from a Discord message.
+     */
+    removeReaction(threadId: string, messageId: string, emoji: EmojiValue | string): Promise<void>;
+    /**
+     * Encode an emoji for use in Discord API URLs.
+     */
+    protected encodeEmoji(emoji: EmojiValue | string): string;
+    /**
+     * Start typing indicator in a Discord channel or thread.
+     */
+    startTyping(threadId: string, _status?: string): Promise<void>;
+    /**
+     * Fetch messages from a Discord channel or thread.
+     * If threadId includes a Discord thread ID, fetches from that thread channel.
+     */
+    fetchMessages(threadId: string, options?: FetchOptions): Promise<FetchResult<unknown>>;
+    /**
+     * Fetch thread/channel information.
+     */
+    fetchThread(threadId: string): Promise<ThreadInfo>;
+    /**
+     * Open a DM with a user.
+     */
+    openDM(userId: string): Promise<string>;
+    /**
+     * Check if a thread is a DM.
+     */
+    isDM(threadId: string): boolean;
+    /**
+     * Encode platform data into a thread ID string.
+     */
+    encodeThreadId(platformData: DiscordThreadId): string;
+    /**
+     * Decode thread ID string back to platform data.
+     */
+    decodeThreadId(threadId: string): DiscordThreadId;
+    /**
+     * Parse a Discord message into normalized format.
+     */
+    parseMessage(raw: unknown): Message<unknown>;
+    /**
+     * Parse a Discord API message into normalized format.
+     */
+    protected parseDiscordMessage(raw: APIMessage, threadId: string): Message<unknown>;
+    /**
+     * Determine attachment type from MIME type.
+     */
+    protected getAttachmentType(mimeType?: string | null): "image" | "video" | "audio" | "file";
+    /**
+     * Render formatted content to Discord markdown.
+     */
+    renderFormatted(content: FormattedContent): string;
+    /**
+     * Make a request to the Discord API.
+     */
+    protected discordFetch(path: string, method: string, body?: unknown): Promise<Response>;
+    /**
+     * Start Gateway WebSocket listener for receiving messages/mentions.
+     * Uses waitUntil to keep the connection alive for the specified duration.
+     *
+     * This is a workaround for serverless environments - the Gateway connection
+     * will stay alive for the duration, listening for messages.
+     *
+     * @param options - Webhook options with waitUntil function
+     * @param durationMs - How long to keep listening (default: 180000ms = 3 minutes)
+     * @param abortSignal - Optional AbortSignal to stop the listener early (e.g., when a new listener starts)
+     * @param webhookUrl - URL to forward Gateway events to (required for webhook forwarding mode)
+     * @returns Response indicating the listener was started
+     */
+    startGatewayListener(options: WebhookOptions, durationMs?: number, abortSignal?: AbortSignal, webhookUrl?: string): Promise<Response>;
+    /**
+     * Run the Gateway listener for a specified duration.
+     */
+    protected runGatewayListener(durationMs: number, abortSignal?: AbortSignal, webhookUrl?: string): Promise<void>;
+    /**
+     * Set up legacy Gateway handlers for direct processing (when webhookUrl is not provided).
+     */
+    protected setupLegacyGatewayHandlers(client: Client, isShuttingDown: () => boolean): void;
+    /**
+     * Forward a Gateway event to the webhook endpoint.
+     */
+    protected forwardGatewayEvent(webhookUrl: string, event: DiscordForwardedEvent): Promise<void>;
+    /**
+     * Handle a message received via the Gateway WebSocket.
+     */
+    protected handleGatewayMessage(message: Message$1, isMentioned: boolean): Promise<void>;
+    /**
+     * Handle a reaction received via the Gateway WebSocket.
+     */
+    protected handleGatewayReaction(reaction: {
+        emoji: {
+            name: string | null;
+            id: string | null;
+        };
+        message: {
+            id: string;
+            channelId: string;
+            guildId: string | null;
+            channel?: {
+                isThread?: () => boolean;
+                parentId?: string | null;
+            };
+        };
+    }, user: {
+        id: string;
+        username: string;
+        bot: boolean;
+    }, added: boolean): Promise<void>;
+    /**
+     * Derive channel ID from a Discord thread ID.
+     * Discord: discord:{guildId}:{channelId}:{threadId} -> discord:{guildId}:{channelId}
+     * If already a channel ID (3 parts), returns as-is.
+     */
+    channelIdFromThreadId(threadId: string): string;
+    /**
+     * Fetch channel-level messages (not thread replies).
+     * Uses the parent channel ID to fetch top-level messages.
+     */
+    fetchChannelMessages(channelId: string, options?: FetchOptions): Promise<FetchResult<unknown>>;
+    /**
+     * List threads in a Discord channel.
+     * Fetches active threads from the guild and archived threads from the channel.
+     */
+    listThreads(channelId: string, options?: ListThreadsOptions): Promise<ListThreadsResult<unknown>>;
+    /**
+     * Fetch Discord channel info/metadata.
+     */
+    fetchChannelInfo(channelId: string): Promise<ChannelInfo>;
+    /**
+     * Post a message to channel top-level (not in a thread).
+     * Posts directly to the parent channel without a thread reference.
+     */
+    postChannelMessage(channelId: string, message: AdapterPostableMessage): Promise<RawMessage<unknown>>;
+    /**
+     * Normalize a Discord emoji to our standard EmojiValue format.
+     */
+    protected normalizeDiscordEmoji(emojiName: string): EmojiValue;
+}
+/**
+ * Create a Discord adapter instance.
+ */
+declare function createDiscordAdapter(config?: DiscordAdapterConfig): DiscordAdapter;
+
+export { DiscordAdapter, type DiscordAdapterConfig, DiscordFormatConverter, DiscordFormatConverter as DiscordMarkdownConverter, type DiscordThreadId, cardToDiscordPayload, cardToFallbackText, createDiscordAdapter, decodeDiscordCustomId, encodeDiscordCustomId };

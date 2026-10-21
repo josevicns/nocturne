@@ -1,0 +1,4 @@
+type TFromTypeNames<TypeNames extends string[], Result extends unknown = never> = (TypeNames extends readonly [infer Left extends string, ...infer Right extends string[]] ? TFromTypeNames<Right, Result | TFromTypeName<Left>> : Result);
+type TFromTypeName<TypeName extends string> = (TypeName extends 'array' ? {} : TypeName extends 'bigint' ? bigint : TypeName extends 'boolean' ? boolean : TypeName extends 'integer' ? number : TypeName extends 'object' ? object : TypeName extends 'null' ? null : TypeName extends 'number' ? number : TypeName extends 'string' ? string : TypeName extends 'symbol' ? symbol : TypeName extends 'undefined' ? undefined : unknown);
+export type XStaticType<TypeName extends string[] | string> = (TypeName extends string[] ? TFromTypeNames<TypeName> : TypeName extends string ? TFromTypeName<TypeName> : unknown);
+export {};

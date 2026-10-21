@@ -1,0 +1,66 @@
+{
+  "name": "svelte-highlight",
+  "version": "7.9.0",
+  "license": "MIT",
+  "description": "Svelte component library for highlighting code using highlight.js",
+  "author": "Eric Liu (https://github.com/metonym)",
+  "type": "module",
+  "dependencies": {
+    "highlight.js": "11.11.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/metonym/svelte-highlight.git"
+  },
+  "homepage": "https://svhe.onrender.com/",
+  "bugs": "https://github.com/metonym/svelte-highlight/issues",
+  "keywords": [
+    "svelte",
+    "svelte components",
+    "highlight.js",
+    "syntax highlight"
+  ],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "svelte": "./index.js"
+    },
+    "./*.svelte": {
+      "types": "./*.svelte.d.ts",
+      "import": "./*.svelte"
+    },
+    "./styles/*.css": {
+      "import": "./styles/*.css"
+    },
+    "./styles": {
+      "types": "./styles/index.d.ts",
+      "import": "./styles/index.js"
+    },
+    "./styles/*": {
+      "types": "./styles/*.d.ts",
+      "import": "./styles/*.js"
+    },
+    "./styles/*.js": {
+      "types": "./styles/*.d.ts",
+      "import": "./styles/*.js"
+    },
+    "./languages": {
+      "types": "./languages/index.d.ts",
+      "import": "./languages/index.js"
+    },
+    "./languages/*": {
+      "types": "./languages/*.d.ts",
+      "import": "./languages/*.js"
+    },
+    "./languages/*.js": {
+      "types": "./languages/*.d.ts",
+      "import": "./languages/*.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "svelte": "./index.js",
+  "types": "./index.d.ts",
+  "sideEffects": [
+    "src/styles/*.css"
+  ]
+}

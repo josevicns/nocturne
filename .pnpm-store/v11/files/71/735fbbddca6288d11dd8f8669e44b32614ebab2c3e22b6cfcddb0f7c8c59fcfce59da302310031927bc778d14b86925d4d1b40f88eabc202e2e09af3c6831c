@@ -1,0 +1,3 @@
+declare const App: import("svelte").Component<Record<string, never>, {}, "">;
+type App = ReturnType<typeof App>;
+export default App;

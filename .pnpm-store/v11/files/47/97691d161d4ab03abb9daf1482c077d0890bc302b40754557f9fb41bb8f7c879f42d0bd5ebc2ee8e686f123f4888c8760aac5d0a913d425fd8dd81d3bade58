@@ -1,0 +1,158 @@
+import { type Force, type Simulation, type SimulationLinkDatum, type SimulationNodeDatum } from 'd3-force';
+import type { Snippet } from 'svelte';
+export type Forces<NodeDatum extends SimulationNodeDatum, LinkDatum extends SimulationLinkDatum<NodeDatum> | undefined> = Record<string, Force<NodeDatum, LinkDatum>>;
+export type Data<TNode = any, TLink = any> = {
+    nodes: TNode[];
+    links?: TLink[];
+};
+export type LinkPosition = {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+};
+export type OnStartEvent<NodeDatum extends SimulationNodeDatum, LinkDatum extends SimulationLinkDatum<NodeDatum> | undefined> = {
+    alpha: number;
+    alphaTarget: number;
+    simulation: Simulation<NodeDatum, LinkDatum>;
+};
+export type OnTickEvent<NodeDatum extends SimulationNodeDatum, LinkDatum extends SimulationLinkDatum<NodeDatum> | undefined> = {
+    alpha: number;
+    alphaTarget: number;
+    nodes: NodeDatum[];
+    links: LinkDatum[];
+    simulation: Simulation<NodeDatum, LinkDatum>;
+};
+export type OnEndEvent<NodeDatum extends SimulationNodeDatum, LinkDatum extends SimulationLinkDatum<NodeDatum> | undefined> = {
+    alpha: number;
+    alphaTarget: number;
+    simulation: Simulation<NodeDatum, LinkDatum>;
+};
+export type OnNodesChangeEvent<NodeDatum extends SimulationNodeDatum, LinkDatum extends SimulationLinkDatum<NodeDatum> | undefined> = {
+    alpha: number;
+    alphaTarget: number;
+    nodes: NodeDatum[];
+    links: LinkDatum[];
+    simulation: Simulation<NodeDatum, LinkDatum>;
+};
+/**
+ * Default initial alpha value of the simulation.
+ */
+export declare const DEFAULT_ALPHA: number;
+/**
+ * Default target alpha value for the simulation.
+ */
+export declare const DEFAULT_ALPHA_TARGET: number;
+/**
+ * Default alpha decay rate per tick.
+ *
+ * Formula: `1 - Math.pow(0.001, 1 / 300)`.
+ */
+export declare const DEFAULT_ALPHA_DECAY: number;
+/**
+ * Default minimum alpha value at which simulation stops.
+ */
+export declare const DEFAULT_ALPHA_MIN: number;
+/**
+ * Default velocity decay factor applied to nodes each tick.
+ */
+export declare const DEFAULT_VELOCITY_DECAY: number;
+export type ForceSimulationProps<NodeDatum extends SimulationNodeDatum, LinkDatum extends SimulationLinkDatum<NodeDatum> | undefined> = {
+    /**
+     * Force simulation parameters
+     */
+    forces: Forces<NodeDatum, LinkDatum>;
+    /**
+     * An object with arrays of nodes and links,
+     * to be used for position calculation.
+     */
+    data: Data<NodeDatum, LinkDatum>;
+    /**
+     * Current alpha value of the simulation
+     * @default DEFAULT_ALPHA
+     */
+    alpha?: number;
+    /**
+     * Target alpha value for the simulation
+     * @default DEFAULT_ALPHA_TARGET
+     */
+    alphaTarget?: number;
+    /**
+     * Alpha decay rate per tick
+     * @default DEFAULT_ALPHA_DECAY
+     */
+    alphaDecay?: number;
+    /**
+     * Minimum alpha value at which simulation stops
+     * @default DEFAULT_ALPHA_MIN
+     */
+    alphaMin?: number;
+    /**
+     * Velocity decay factor applied to nodes each tick
+     * @default DEFAULT_VELOCITY_DECAY
+     */
+    velocityDecay?: number;
+    /**
+     * Stop simulation
+     * @default false
+     */
+    stopped?: boolean;
+    /**
+     * If true, will only update nodes after simulation has completed
+     * @default false
+     */
+    static?: boolean;
+    /**
+     * Clone nodes since simulation mutates original
+     * @default false
+     */
+    cloneNodes?: boolean;
+    /**
+     * Callback function triggered when simulation starts
+     */
+    onStart?: (e: OnStartEvent<NodeDatum, LinkDatum | undefined>) => void;
+    /**
+     * Callback function triggered right before nodes get passed to the simulation
+     */
+    onNodesChange?: (e: OnNodesChangeEvent<NodeDatum, LinkDatum | undefined>) => void;
+    /**
+     * Callback function triggered on each simulation tick
+     */
+    onTick?: (e: OnTickEvent<NodeDatum, LinkDatum | undefined>) => void;
+    /**
+     * Callback function triggered when simulation ends
+     */
+    onEnd?: (e: OnEndEvent<NodeDatum, LinkDatum | undefined>) => void;
+    children?: Snippet<[
+        {
+            nodes: NodeDatum[];
+            links: LinkDatum[];
+            linkPositions: LinkPosition[];
+            simulation: Simulation<NodeDatum, LinkDatum>;
+        }
+    ]>;
+};
+declare function $$render<NodeDatum extends SimulationNodeDatum, LinkDatum extends SimulationLinkDatum<NodeDatum> | undefined>(): {
+    props: ForceSimulationProps<NodeDatum, LinkDatum>;
+    exports: {};
+    bindings: "alpha";
+    slots: {};
+    events: {};
+};
+declare class __sveltets_Render<NodeDatum extends SimulationNodeDatum, LinkDatum extends SimulationLinkDatum<NodeDatum> | undefined> {
+    props(): ReturnType<typeof $$render<NodeDatum, LinkDatum>>['props'];
+    events(): ReturnType<typeof $$render<NodeDatum, LinkDatum>>['events'];
+    slots(): ReturnType<typeof $$render<NodeDatum, LinkDatum>>['slots'];
+    bindings(): "alpha";
+    exports(): {};
+}
+interface $$IsomorphicComponent {
+    new <NodeDatum extends SimulationNodeDatum, LinkDatum extends SimulationLinkDatum<NodeDatum> | undefined>(options: import('svelte').ComponentConstructorOptions<ReturnType<__sveltets_Render<NodeDatum, LinkDatum>['props']>>): import('svelte').SvelteComponent<ReturnType<__sveltets_Render<NodeDatum, LinkDatum>['props']>, ReturnType<__sveltets_Render<NodeDatum, LinkDatum>['events']>, ReturnType<__sveltets_Render<NodeDatum, LinkDatum>['slots']>> & {
+        $$bindings?: ReturnType<__sveltets_Render<NodeDatum, LinkDatum>['bindings']>;
+    } & ReturnType<__sveltets_Render<NodeDatum, LinkDatum>['exports']>;
+    <NodeDatum extends SimulationNodeDatum, LinkDatum extends SimulationLinkDatum<NodeDatum> | undefined>(internal: unknown, props: ReturnType<__sveltets_Render<NodeDatum, LinkDatum>['props']> & {}): ReturnType<__sveltets_Render<NodeDatum, LinkDatum>['exports']>;
+    z_$$bindings?: ReturnType<__sveltets_Render<any, any>['bindings']>;
+}
+declare const ForceSimulation: $$IsomorphicComponent;
+type ForceSimulation<NodeDatum extends SimulationNodeDatum, LinkDatum extends SimulationLinkDatum<NodeDatum> | undefined> = InstanceType<typeof ForceSimulation<NodeDatum, LinkDatum>>;
+export default ForceSimulation;

@@ -1,0 +1,28 @@
+// deno-fmt-ignore-file
+import { Literal } from '../../types/literal.mjs';
+import { IsNumber } from '../../types/number.mjs';
+import { IsInteger } from '../../types/integer.mjs';
+import { EvaluateUnion } from '../evaluate/evaluate.mjs';
+import { Extends, ExtendsResult } from '../../extends/index.mjs';
+import { FormatArrayIndexer } from './array-indexer.mjs';
+function IndexElementsWithIndexer(types, indexer) {
+    return types.reduceRight((result, right, index) => {
+        const check = Extends({}, Literal(index), indexer);
+        return ExtendsResult.IsExtendsTrueLike(check)
+            ? [right, ...result]
+            : result;
+    }, []);
+}
+function FromTupleWithIndexer(types, indexer) {
+    const formattedArrayIndexer = FormatArrayIndexer(indexer);
+    const elements = IndexElementsWithIndexer(types, formattedArrayIndexer);
+    return EvaluateUnion(elements);
+}
+function FromTupleWithoutIndexer(types) {
+    return EvaluateUnion(types);
+}
+export function FromTuple(types, indexer) {
+    return (IsNumber(indexer) || IsInteger(indexer)
+        ? FromTupleWithoutIndexer(types)
+        : FromTupleWithIndexer(types, indexer));
+}

@@ -1,0 +1,266 @@
+import type { ComponentRender } from '../contexts/canvas.js';
+import type { AnyScale, DomainType } from '../utils/scales.svelte.js';
+import type { ChartPropsWithoutHTML } from '../components/Chart/Chart.svelte';
+import type { Extents } from '../utils/types.js';
+import { type Accessor } from '../utils/common.js';
+import { GeoState } from './geo.svelte.js';
+import type { TransformState } from './transform.svelte.js';
+import type { TooltipState } from './tooltip.svelte.js';
+import type { BrushDomainType, BrushState } from './brush.svelte.js';
+import { SeriesState } from './series.svelte.js';
+/** Information a mark registers with the chart for domain/series calculation */
+export interface MarkInfo {
+    /** The mark's own data array (if overriding chart data) */
+    data?: any[];
+    /** x accessor override */
+    x?: Accessor;
+    /** y accessor override */
+    y?: Accessor;
+    /** Series key for this mark */
+    seriesKey?: string;
+    /** Color for legend/tooltip */
+    color?: string;
+    /** Label for legend/tooltip */
+    label?: string;
+}
+export type NodeKind = 'group' | 'mark' | 'composite-mark';
+export interface ComponentNode {
+    id: symbol;
+    kind: NodeKind;
+    name: string;
+    parent: ComponentNode | null;
+    children: ComponentNode[];
+    /** Canvas render info — only present for components that render on canvas */
+    canvasRender?: ComponentRender;
+    /** Whether this node has a composite-mark ancestor (computed on creation) */
+    insideCompositeMark: boolean;
+}
+export interface RegisterComponentOptions<T extends Element = Element> {
+    /** Display name for the node (used for debugging) */
+    name: string;
+    /** The type of node */
+    kind: NodeKind;
+    /** Canvas render info. When provided, sets up dependency tracking and cleanup automatically. */
+    canvasRender?: ComponentRender<T>;
+    /**
+     * Mark info getter for chart domain/series calculation.
+     * When provided and not inside a composite mark, automatically registered reactively.
+     */
+    markInfo?: () => MarkInfo;
+}
+export declare class ChartState<TData = any, XScale extends AnyScale = AnyScale, YScale extends AnyScale = AnyScale> {
+    #private;
+    props: ChartPropsWithoutHTML<TData, XScale, YScale>;
+    geoState: GeoState;
+    transformState: TransformState;
+    tooltipState: TooltipState<any>;
+    brushState: BrushState;
+    seriesState: SeriesState<TData, any>;
+    _containerWidth: number;
+    _containerHeight: number;
+    isMounted: boolean;
+    private _markInfosRaw;
+    private _markInfosVersion;
+    private _nextMarkId;
+    /** Reactive accessor — reads _markInfosVersion to create a reactive dependency,
+     * returns the plain array so items are never wrapped in Svelte proxies.
+     *
+     * When a geo projection is active, strips x/y/data from mark info — those
+     * values are geographic coordinates handled by the projection, not xScale/yScale.
+     * seriesKey/color/label are preserved so marks can still contribute to legends. */
+    private get _markInfos();
+    /**
+     * Register a mark with the chart. The MarkInfo snapshot is stored directly
+     * (not inside $derived) so chart deriveds can read _markInfos without creating
+     * circular references. Returns a cleanup function to call on unmount.
+     *
+     * For use in tests or synchronous contexts. In components, use `registerComponent` with `markInfo`.
+     */
+    registerMark(info: MarkInfo): () => void;
+    /**
+     * Register a component tree node. Call at the top level of a component's <script> block.
+     * Sets self as context for children, handles canvas deps/cleanup, and mark registration.
+     */
+    registerComponent<T extends Element = Element>(options: RegisterComponentOptions<T>): ComponentNode;
+    private _removeComponentNode;
+    containerRef: HTMLElement | undefined;
+    private _xDomainMotion;
+    private _yDomainMotion;
+    private _xDomainIsDate;
+    private _yDomainIsDate;
+    meta: Record<string, any>;
+    constructor(props: ChartPropsWithoutHTML<TData, XScale, YScale>, overrides?: {
+        brushXDomain?: () => BrushDomainType | undefined;
+        brushYDomain?: () => BrushDomainType | undefined;
+    });
+    containerWidth: number;
+    containerHeight: number;
+    data: import("d3-sankey").SankeyGraph<any, any> | readonly TData[] | import("d3-hierarchy").HierarchyNode<TData>;
+    flatData: TData[];
+    _xScaleProp: import("d3-scale").ScaleTime<number, number, never> | import("d3-scale").ScaleBand<string> | AnyScale<any, any, any[]>;
+    _yScaleProp: import("d3-scale").ScaleTime<number, number, never> | import("d3-scale").ScaleBand<string> | AnyScale<any, any, any[]>;
+    _zScaleProp: AnyScale;
+    _rScaleProp: AnyScale | import("d3-scale").ScalePower<any, any, any>;
+    xRangeProp: import("../utils/types.js").BaseRange | undefined;
+    yRangeProp: import("../utils/types.js").BaseRange | undefined;
+    /** Transform-aware range for band scales in domain mode (D3 range-rescaling pattern) */
+    private _xScaleRange;
+    private _yScaleRange;
+    yReverse: boolean;
+    private resolveAccessor;
+    x: (d: TData) => any;
+    y: (d: TData) => any;
+    z: (d: TData) => any;
+    r: (d: TData) => any;
+    c: (d: TData) => any;
+    x1: (d: TData) => any;
+    y1: (d: TData) => any;
+    filteredExtents: {
+        [k: string]: any;
+    };
+    activeGetters: {
+        x: (d: TData) => any;
+        y: (d: TData) => any;
+        z: (d: TData) => any;
+        r: (d: TData) => any;
+    };
+    padding: {
+        top: number;
+        right: number;
+        bottom: number;
+        left: number;
+    };
+    box: {
+        top: number;
+        left: number;
+        bottom: number;
+        right: number;
+        width: number;
+        height: number;
+    };
+    width: number;
+    height: number;
+    extents: Extents;
+    /**
+     * Resolves the domain for a given axis based on props, series state, and data.
+     * Handles explicit domains, intervals, baselines, and series-specific calculations.
+     */
+    private _computeTransformDomain;
+    /**
+     * Auto-derive baseline for an axis based on valueAxis.
+     * The value axis gets baseline=0 (unless time scale), the category axis gets none.
+     */
+    private _autoBaseline;
+    private resolveDomain;
+    _xDomain: DomainType;
+    _yDomain: DomainType;
+    /** Full domain from data/props before any transform override */
+    _baseXDomain: number[];
+    _baseYDomain: number[];
+    /** Target domain — narrowed by transform when mode is 'domain', but not yet animated */
+    _rawXDomain: number[];
+    _rawYDomain: number[];
+    /** Effective domain — animated via motion if configured */
+    xDomain: any;
+    yDomain: any;
+    zDomain: number[];
+    rDomain: number[];
+    x1Domain: (string | number | Date | null | undefined)[] | undefined;
+    y1Domain: (string | number | Date | null | undefined)[] | undefined;
+    cDomain: any[];
+    snappedPadding: import("../utils/types.js").PaddingArray;
+    snappedExtents: {
+        x?: (string | number)[] | undefined;
+        y?: (string | number)[] | undefined;
+        z?: (string | number)[] | undefined;
+        r?: (string | number)[] | undefined;
+    };
+    xScale: AnyScale;
+    xGet: (d: TData) => any;
+    yScale: AnyScale;
+    yGet: (d: TData) => any;
+    /** Scale using the full (pre-transform) domain — used by BrushState for positioning */
+    baseXScale: AnyScale;
+    baseYScale: AnyScale;
+    zScale: AnyScale;
+    zGet: (d: TData) => any;
+    rScale: AnyScale;
+    rGet: (d: TData) => any;
+    x1Scale: AnyScale<any, any, any[]> | null;
+    x1Get: ((d: TData) => any) | null;
+    y1Scale: AnyScale<any, any, any[]> | null;
+    y1Get: ((d: TData) => any) | null;
+    cScale: AnyScale<any, any, any[]> | null;
+    cGet: (d: any) => any;
+    xDomainPossiblyNice: any[];
+    yDomainPossiblyNice: any[];
+    zDomainPossiblyNice: any[];
+    rDomainPossiblyNice: any[];
+    /** Viewport range — always [0, width] / [height, 0] for layout components (axis, grid, etc).
+     *  When band scale domain transform is active, xScale.range() is wider than the viewport,
+     *  so we return the base scale's range instead. */
+    xRange: any[];
+    yRange: any[];
+    zRange: any[];
+    rRange: any[];
+    aspectRatio: number;
+    get percentRange(): boolean;
+    get xNice(): import("../utils/types.js").Nice;
+    get yNice(): import("../utils/types.js").Nice;
+    get zNice(): import("../utils/types.js").Nice;
+    get rNice(): import("../utils/types.js").Nice;
+    get xDomainSort(): boolean;
+    get yDomainSort(): boolean;
+    get zDomainSort(): boolean;
+    get rDomainSort(): boolean;
+    get xReverse(): boolean;
+    get zReverse(): boolean;
+    get rReverse(): boolean;
+    get xPadding(): import("../utils/types.js").PaddingArray;
+    get yPadding(): import("../utils/types.js").PaddingArray;
+    get zPadding(): import("../utils/types.js").PaddingArray;
+    get rPadding(): import("../utils/types.js").PaddingArray;
+    get cRange(): string[] | readonly string[] | undefined;
+    get x1Range(): import("../utils/types.js").XRangeWithScale<XScale> | undefined;
+    get y1Range(): import("../utils/types.js").YRangeWithScale<YScale> | undefined;
+    get xInterval(): import("d3-time").TimeInterval | null;
+    get yInterval(): import("d3-time").TimeInterval | null;
+    get radial(): boolean;
+    get valueAxis(): "x" | "y";
+    get tooltip(): TooltipState<any>;
+    get geo(): GeoState;
+    get brush(): BrushState;
+    get transform(): TransformState;
+    get series(): SeriesState<TData, any>;
+    /**
+     * Convert a brush selection to transform scale/translate, zooming the chart to the brushed region.
+     * Used by integrated brush mode when `transform.mode === 'domain'`.
+     */
+    zoomToBrush(brush: {
+        x: BrushDomainType;
+        y: BrushDomainType;
+    }, axis?: 'x' | 'y' | 'both'): void;
+    get config(): {
+        x: Accessor<TData>;
+        y: Accessor<TData>;
+        z: Accessor<TData>;
+        r: Accessor<TData>;
+        c: Accessor<TData>;
+        x1: Accessor<TData>;
+        y1: Accessor<TData>;
+        xDomain: DomainType;
+        yDomain: DomainType;
+        zDomain: DomainType;
+        rDomain: DomainType;
+        x1Domain: DomainType;
+        y1Domain: DomainType;
+        cDomain: DomainType;
+        xRange: import("../utils/types.js").BaseRange | undefined;
+        yRange: import("../utils/types.js").BaseRange | undefined;
+        zRange: import("../utils/types.js").BaseRange | undefined;
+        rRange: import("../utils/types.js").BaseRange | undefined;
+        cRange: string[] | readonly string[] | undefined;
+        x1Range: import("../utils/types.js").XRangeWithScale<XScale> | undefined;
+        y1Range: import("../utils/types.js").YRangeWithScale<YScale> | undefined;
+    };
+}

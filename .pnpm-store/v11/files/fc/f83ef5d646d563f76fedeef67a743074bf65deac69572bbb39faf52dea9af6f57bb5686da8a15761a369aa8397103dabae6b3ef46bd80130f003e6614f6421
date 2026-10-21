@@ -1,0 +1,176 @@
+import type { Snippet } from 'svelte';
+import type { SVGAttributes } from 'svelte/elements';
+import type { CommonEvents, Without } from '../../utils/types.js';
+import type { DataProp, DataDrivenStyleProps } from '../../utils/dataProp.js';
+import { type Corners, type Insets } from '../../utils/rect.svelte.js';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+import type { GeoState } from '../../states/geo.svelte.js';
+export type RectPropsWithoutHTML = {
+    /**
+     * The x position of the rectangle.
+     * - `number`: pixel value (direct)
+     * - `string`: data property name, resolved via xScale
+     * - `function(d)`: accessor called per data item, result passed through xScale
+     *
+     * @default 0
+     */
+    x?: DataProp;
+    /**
+     * The initial x position (pixel mode only).
+     *
+     * @default x
+     */
+    initialX?: number;
+    /**
+     * The y position of the rectangle.
+     * - `number`: pixel value (direct)
+     * - `string`: data property name, resolved via yScale
+     * - `function(d)`: accessor called per data item, result passed through yScale
+     *
+     * @default 0
+     */
+    y?: DataProp;
+    /**
+     * The initial y position (pixel mode only).
+     *
+     * @default y
+     */
+    initialY?: number;
+    /**
+     * The width of the rectangle (pixels).
+     *
+     * @default 0
+     */
+    width?: DataProp;
+    initialWidth?: number;
+    /**
+     * The height of the rectangle (pixels).
+     *
+     * @default 0
+     */
+    height?: DataProp;
+    initialHeight?: number;
+    /**
+     * Left/start x edge (data mode).
+     * - `string`: data property name, resolved via xScale
+     * - `function(d)`: accessor called per data item, result passed through xScale
+     * - `number`: pixel value
+     */
+    x0?: DataProp;
+    /**
+     * Right/end x edge (data mode).
+     * - `string`: data property name, resolved via xScale
+     * - `function(d)`: accessor called per data item, result passed through xScale
+     * - `number`: pixel value
+     */
+    x1?: DataProp;
+    /**
+     * Top/start y edge (data mode).
+     * - `string`: data property name, resolved via yScale
+     * - `function(d)`: accessor called per data item, result passed through yScale
+     * - `number`: pixel value
+     */
+    y0?: DataProp;
+    /**
+     * Bottom/end y edge (data mode).
+     * - `string`: data property name, resolved via yScale
+     * - `function(d)`: accessor called per data item, result passed through yScale
+     * - `number`: pixel value
+     */
+    y1?: DataProp;
+    /**
+     * Insets to shrink the rendered rectangle.
+     * Supports `all`, `x`, `y`, `left`, `right`, `top`, `bottom`.
+     */
+    insets?: Insets;
+    /**
+     * Data array to iterate over in data mode.
+     * Falls back to chart context data when not provided.
+     */
+    data?: any[];
+    /**
+     * Key function for keyed {#each} rendering in data mode.
+     *
+     * @default (d, i) => i
+     */
+    key?: (d: any, index: number) => any;
+    /**
+     * Underlying `<rect>` tag when using <Svg>. Useful for bindings (pixel mode only).
+     *
+     * @bindable
+     */
+    ref?: SVGRectElement;
+    /** Motion configuration (pixel mode only). */
+    motion?: MotionProp<'x' | 'y' | 'width' | 'height'>;
+    /**
+     * Dashed-border pattern. Accepts a number (single dash length), a
+     * `[dash, gap, ...]` array, or a string (same syntax as SVG
+     * `stroke-dasharray`). HTML layer approximates via `border-style: dashed`.
+     */
+    dashArray?: number | number[] | string;
+    /**
+     * Per-corner radii. Accepts a number (all corners equal — same as `rx`),
+     * a `[tl, tr, br, bl]` tuple, or `{ topLeft, topRight, bottomRight, bottomLeft }`.
+     * Takes precedence over `rx`/`ry` when corners differ.
+     */
+    corners?: Corners;
+    /** Children content to render.  Note: Only works for Html layers */
+    children?: Snippet;
+} & DataDrivenStyleProps;
+export type RectProps = RectPropsWithoutHTML & Without<SVGAttributes<SVGRectElement>, RectPropsWithoutHTML> & CommonEvents;
+/** Build the standard `markInfo` payload used by every Rect variant. */
+export declare function rectMarkInfo(props: RectProps, dataMode: boolean): {
+    data?: undefined;
+    x?: undefined;
+    y?: undefined;
+    color?: undefined;
+} | {
+    data: any[] | undefined;
+    x: string | undefined;
+    y: string | undefined;
+    color: string | undefined;
+};
+/**
+ * Reactive state shared by every per-layer Rect variant.
+ */
+export declare class RectState {
+    #private;
+    chartCtx: ChartState;
+    geo: GeoState;
+    hasEdgeProps: boolean;
+    dataMode: boolean;
+    resolvedItems: {
+        d: any;
+        key: any;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    }[];
+    dashArrayResolved: number[] | null;
+    dashArrayAttr: string | undefined;
+    cornersUniformValue: number | undefined;
+    cornersNonUniform: boolean;
+    rx: number;
+    ry: number;
+    get motionX(): any;
+    get motionY(): any;
+    get motionWidth(): any;
+    get motionHeight(): any;
+    resolveCorners(width: number, height: number): import("../../utils/rect.svelte.js").CornerRadii | undefined;
+    roundedRectPath(x: number, y: number, width: number, height: number): string | undefined;
+    borderRadius(width: number, height: number): string | undefined;
+    resolvedCorners: import("../../utils/rect.svelte.js").CornerRadii | undefined;
+    borderRadiusStyle: string | undefined;
+    pixelPathData: string | undefined;
+    staticFill: string | undefined;
+    staticFillOpacity: number | undefined;
+    staticStroke: string | undefined;
+    staticStrokeOpacity: number | undefined;
+    staticStrokeWidth: number | undefined;
+    staticOpacity: number | undefined;
+    staticClassName: string | undefined;
+    staticBorderWidth: string | undefined;
+    constructor(getProps: () => RectProps);
+}

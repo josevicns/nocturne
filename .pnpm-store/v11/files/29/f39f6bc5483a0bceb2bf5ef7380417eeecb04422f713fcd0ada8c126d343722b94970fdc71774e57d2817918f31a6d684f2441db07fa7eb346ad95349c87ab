@@ -1,0 +1,88 @@
+import type { SVGAttributes } from 'svelte/elements';
+import { type Insets } from '../../utils/rect.svelte.js';
+import { type Accessor } from '../../utils/common.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import type { CommonEvents, CommonStyleProps, Without } from '../../utils/types.js';
+export type BarPropsWithoutHTML = {
+    /** Data to render the bar from */
+    data: Object;
+    /** Override `x` from context. @default ctx.x */
+    x?: Accessor;
+    /** Override `y` from context. @default ctx.y */
+    y?: Accessor;
+    /** Override `x1` from context. @default ctx.x1 */
+    x1?: Accessor;
+    /** Override `y1` from context. @default ctx.y1 */
+    y1?: Accessor;
+    /** Series key to use for accessor. */
+    seriesKey?: string;
+    /** Padding between stacked bars. */
+    stackPadding?: number;
+    radius?: number;
+    insets?: Insets;
+    initialX?: number;
+    initialY?: number;
+    initialHeight?: number;
+    initialWidth?: number;
+    /** Fixed width in pixels. */
+    width?: number;
+    /** Fixed height in pixels. */
+    height?: number;
+    rounded?: 'all' | 'none' | 'edge' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+    motion?: MotionProp<'x' | 'y' | 'width' | 'height'>;
+    /** Setup pointer events to show tooltip for related data. */
+    tooltip?: boolean;
+} & CommonStyleProps;
+export type BarProps = BarPropsWithoutHTML & Without<Omit<SVGAttributes<SVGElement>, 'width' | 'height' | 'x' | 'y' | 'offset'>, BarPropsWithoutHTML> & CommonEvents;
+/**
+ * Reactive state shared by every per-layer Bar variant. Holds the resolved
+ * accessors, dimensions, corner-rounding flags, and motion-aware initial values.
+ */
+export declare class BarState {
+    #private;
+    ctx: ChartState;
+    constructor(getProps: () => BarProps);
+    series: import("../index.js").SeriesData<any, any> | undefined;
+    seriesAccessor: string | number | ((d: any) => any) | Accessor<any>[] | undefined;
+    stackAccessors: {
+        y0: (d: any) => number;
+        y1: (d: any) => number;
+        value: (d: any) => [number, number] | null;
+    } | null;
+    x: string | number | ((d: any) => any) | Accessor<any>[];
+    y: string | number | ((d: any) => any) | Accessor<any>[];
+    x1: Accessor;
+    y1: Accessor;
+    seriesIndex: number | undefined;
+    seriesCount: number;
+    stackInsets: Insets | undefined;
+    insets: Insets | undefined;
+    getDimensions: (item: any) => {
+        x: any;
+        y: any;
+        width: number;
+        height: number;
+    } | undefined;
+    scaleDimensions: {
+        x: any;
+        y: any;
+        width: number;
+        height: number;
+    };
+    dimensions: {
+        x: any;
+        y: any;
+        width: number;
+        height: number;
+    };
+    valueAccessor: (d: any) => any;
+    resolvedValue: any;
+    /** Resolved `rounded="edge"` based on orientation and value */
+    rounded: "none" | "left" | "right" | "all" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+    corners: [number, number, number, number];
+    resolvedInitialY: number | undefined;
+    resolvedInitialHeight: number | undefined;
+    resolvedInitialX: number | undefined;
+    resolvedInitialWidth: number | undefined;
+}

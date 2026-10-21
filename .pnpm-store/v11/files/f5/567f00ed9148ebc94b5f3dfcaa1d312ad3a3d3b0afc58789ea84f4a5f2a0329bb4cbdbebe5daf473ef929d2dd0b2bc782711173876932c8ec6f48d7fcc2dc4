@@ -1,0 +1,182 @@
+import type { Snippet } from 'svelte';
+import type { SVGAttributes } from 'svelte/elements';
+import type { ChartState } from '../../states/chart.svelte.js';
+import { type Accessor } from '../../utils/common.js';
+import { type Insets } from '../../utils/rect.svelte.js';
+import type { CommonStyleProps, Without } from '../../utils/types.js';
+export type WaffleRound = boolean | ((n: number) => number);
+export type WafflePropsWithoutHTML = {
+    /** Override chart context data. */
+    data?: any[];
+    /** Override `x` from context. @default ctx.x */
+    x?: Accessor;
+    /** Override `y` from context. @default ctx.y */
+    y?: Accessor;
+    /** Override `x1` from context. @default ctx.x1 */
+    x1?: Accessor;
+    /** Override `y1` from context. @default ctx.y1 */
+    y1?: Accessor;
+    /**
+     * Axis the waffle extends along (the value axis).
+     *
+     * - `'y'` (default): vertical waffle, like Plot's `waffleY`. Cells stack
+     *   upward from the value=0 baseline.
+     * - `'x'`: horizontal waffle, like Plot's `waffleX`. Cells extend rightward.
+     *
+     * Falls back to the chart's `valueAxis`.
+     */
+    axis?: 'x' | 'y';
+    /**
+     * The quantity each cell represents. Larger units produce fewer cells.
+     * @default 1
+     */
+    unit?: number;
+    /**
+     * The number of cells per row (along the anchor axis). When omitted,
+     * computed automatically from the bar width and unit so cells stay
+     * approximately square.
+     */
+    multiple?: number;
+    /**
+     * Pixel separation between adjacent cells.
+     * @default 1
+     */
+    gap?: number;
+    /**
+     * How to handle non-integer cell counts.
+     *
+     * - `false` (default) — keep the partial cell as a fractional cut-off
+     * - `true` — `Math.round`
+     * - function — custom rounding (e.g. `Math.floor`, `Math.ceil`)
+     */
+    round?: WaffleRound;
+    /** Cell horizontal corner radius (number of pixels, or "100%" for circles). */
+    rx?: number | string;
+    /** Cell vertical corner radius (number of pixels, or "100%" for circles). */
+    ry?: number | string;
+    /** Series key for stacked-waffle support. */
+    seriesKey?: string;
+    /** Insets to shrink each waffle's bounding band. */
+    insets?: Insets;
+    /** Fixed band-axis size in pixels. Override the band width / height. */
+    width?: number;
+    /** Fixed band-axis size in pixels. Override the band width / height. */
+    height?: number;
+    /** Default `(d, i) => i` */
+    key?: (d: any, index: number) => any;
+    /** Setup pointer events to show tooltip for the hovered datum. */
+    tooltip?: boolean;
+    /** Click handler invoked with `(event, { data })` for the hovered waffle. */
+    onWaffleClick?: (e: MouseEvent, detail: {
+        data: any;
+    }) => void;
+    /**
+     * Render a custom symbol per cell instead of the default rect. The snippet
+     * receives the cell's `width`/`height` and the resolved `color` for the
+     * cell. The CSS `color` is applied to the wrapping element, so any nested
+     * SVG using `fill="currentColor"` (or stroke) inherits it automatically.
+     *
+     * SVG layer only — canvas falls back to the default rect.
+     */
+    symbol?: Snippet<[
+        {
+            width: number;
+            height: number;
+            datum: any;
+            color: string;
+        }
+    ]>;
+} & CommonStyleProps;
+export type WaffleProps = WafflePropsWithoutHTML & Without<Omit<SVGAttributes<SVGElement>, 'width' | 'height' | 'x' | 'y'>, WafflePropsWithoutHTML>;
+/** Per-datum, fully-resolved waffle layout — pixel coords ready to render. */
+export type WaffleItem = {
+    data: any;
+    index: number;
+    /** SVG path data for the waffle outline (relative to translate). */
+    pathData: string;
+    /** Pixel translate origin — apply to the path/pattern as `translate(tx, ty)`. */
+    tx: number;
+    ty: number;
+    /** Cell box width in pixels (pattern tile width). */
+    cx: number;
+    /** Cell box height in pixels (pattern tile height). */
+    cy: number;
+    /** Cell centroid in pixel coords (translated). */
+    centroid: {
+        x: number;
+        y: number;
+    };
+    /** Resolved fill color. */
+    fill: string | null;
+};
+export type WaffleLayoutOptions = {
+    axis: 'x' | 'y';
+    unit: number;
+    multiple?: number;
+    round: (n: number) => number;
+    /** Anchor-axis size in pixels (the bar's other-axis extent). */
+    barSize: number;
+    /** Anchor-axis pixel position (the bar's other-axis start). */
+    barStart: number;
+    /** Pixels per data unit on the value axis (signed; negative = inverted). */
+    pixelsPerUnit: number;
+    /** Pixel position of the value=0 baseline along the value axis. */
+    valueZero: number;
+    /** Value range in data units. */
+    v1: number;
+    v2: number;
+};
+/**
+ * Shared reactive state for Waffle. Resolves accessors, computes per-datum
+ * dimensions and waffle layouts (pattern tile size, polygon path, centroid),
+ * and exposes them via `items`.
+ */
+export declare class WaffleState {
+    #private;
+    ctx: ChartState;
+    constructor(getProps: () => WaffleProps);
+    axis: "x" | "y";
+    unit: number;
+    gap: number;
+    round: (n: number) => number;
+    multipleProp: number | undefined;
+    series: import("../index.js").SeriesData<any, any> | undefined;
+    /** Opacity multiplier — fades to 0.1 when another series is highlighted. */
+    seriesOpacity: number;
+    seriesAccessor: string | number | ((d: any) => any) | Accessor<any>[] | undefined;
+    stackAccessors: {
+        y0: (d: any) => number;
+        y1: (d: any) => number;
+        value: (d: any) => [number, number] | null;
+    } | null;
+    data: any[];
+    x: Accessor;
+    y: Accessor;
+    getDimensions: (item: any) => {
+        x: any;
+        y: any;
+        width: number;
+        height: number;
+    } | undefined;
+    /** Pixel slope of the value-axis scale (signed). */
+    pixelsPerUnit: number;
+    /** Pixel position of value=0 along the value axis. */
+    valueZero: number;
+    items: WaffleItem[];
+    /** Resolved gap. */
+    resolvedGap: number;
+}
+/**
+ * Generate the polygon outline of a waffle covering the cell interval
+ * `[i1, i2)` on a grid of `columns` columns. The shape is approximately
+ * rectangular but may have one or two corner cuts when the start or end
+ * value is not aligned to a row boundary, plus extra cuts for fractional
+ * intervals. The last point is the centroid (popped by callers for tooltips
+ * and tip placement).
+ *
+ * Coordinate space is `(column, row)` in cell units — callers transform to
+ * pixel space (and may negate the row axis for screen y).
+ *
+ * @see https://github.com/observablehq/plot/blob/main/src/marks/waffle.js
+ */
+export declare function wafflePoints(i1: number, i2: number, columns: number): [number, number][];

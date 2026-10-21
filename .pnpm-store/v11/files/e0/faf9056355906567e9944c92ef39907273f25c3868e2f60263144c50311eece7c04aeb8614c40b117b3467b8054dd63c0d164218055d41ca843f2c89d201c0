@@ -1,0 +1,1007 @@
+// src/index.ts
+import { createHmac, timingSafeEqual } from "crypto";
+import {
+  AdapterRateLimitError,
+  AuthenticationError,
+  extractCard,
+  NetworkError,
+  ResourceNotFoundError,
+  ValidationError
+} from "@chat-adapter/shared";
+import {
+  ConsoleLogger,
+  convertEmojiPlaceholders,
+  defaultEmojiResolver,
+  Message
+} from "chat";
+
+// src/cards.ts
+var CALLBACK_DATA_PREFIX = "chat:";
+var MAX_BUTTONS = 3;
+var MAX_BUTTON_TITLE_LENGTH = 20;
+var MAX_SUBTITLE_LENGTH = 80;
+var MAX_BUTTON_TEMPLATE_TEXT_LENGTH = 640;
+var MAX_TITLE_LENGTH = 80;
+function encodeMessengerCallbackData(actionId, value) {
+  const payload = { a: actionId };
+  if (typeof value === "string") {
+    payload.v = value;
+  }
+  return `${CALLBACK_DATA_PREFIX}${JSON.stringify(payload)}`;
+}
+function decodeMessengerCallbackData(data) {
+  if (!data) {
+    return { actionId: "messenger_callback", value: void 0 };
+  }
+  if (!data.startsWith(CALLBACK_DATA_PREFIX)) {
+    return { actionId: data, value: data };
+  }
+  try {
+    const decoded = JSON.parse(
+      data.slice(CALLBACK_DATA_PREFIX.length)
+    );
+    if (typeof decoded.a === "string" && decoded.a) {
+      return {
+        actionId: decoded.a,
+        value: typeof decoded.v === "string" ? decoded.v : void 0
+      };
+    }
+  } catch {
+  }
+  return { actionId: data, value: data };
+}
+function cardToMessenger(card) {
+  if (hasUnsupportedElements(card.children)) {
+    return { type: "text", text: cardToMessengerText(card) };
+  }
+  const actions = findActions(card.children);
+  const buttons = actions ? extractButtons(actions) : null;
+  if (buttons && buttons.length > 0 && buttons.length <= MAX_BUTTONS) {
+    const allButtonsFit = buttons.every(
+      (btn) => btn.title.length <= MAX_BUTTON_TITLE_LENGTH
+    );
+    if (allButtonsFit) {
+      if (card.title || card.imageUrl) {
+        return {
+          type: "template",
+          payload: buildGenericTemplate(card, buttons)
+        };
+      }
+      const bodyText = buildBodyText(card);
+      if (bodyText) {
+        return {
+          type: "template",
+          payload: buildButtonTemplate(bodyText, buttons)
+        };
+      }
+    }
+  }
+  return { type: "text", text: cardToMessengerText(card) };
+}
+function cardToMessengerText(card) {
+  const lines = [];
+  if (card.title) {
+    lines.push(card.title);
+  }
+  if (card.subtitle) {
+    lines.push(card.subtitle);
+  }
+  if ((card.title || card.subtitle) && card.children.length > 0) {
+    lines.push("");
+  }
+  if (card.imageUrl) {
+    lines.push(card.imageUrl);
+    lines.push("");
+  }
+  for (let i = 0; i < card.children.length; i++) {
+    const child = card.children[i];
+    const childLines = renderChild(child);
+    if (childLines.length > 0) {
+      lines.push(...childLines);
+      if (i < card.children.length - 1) {
+        lines.push("");
+      }
+    }
+  }
+  return lines.join("\n");
+}
+function buildGenericTemplate(card, buttons) {
+  const bodyText = buildBodyText(card);
+  const title = card.title || bodyText || "Menu";
+  const subtitle = card.subtitle || (card.title && bodyText ? bodyText : null);
+  return {
+    template_type: "generic",
+    elements: [
+      {
+        title: truncate(title, MAX_TITLE_LENGTH),
+        ...subtitle ? { subtitle: truncate(subtitle, MAX_SUBTITLE_LENGTH) } : {},
+        ...card.imageUrl ? { image_url: card.imageUrl } : {},
+        buttons
+      }
+    ]
+  };
+}
+function buildButtonTemplate(text, buttons) {
+  return {
+    template_type: "button",
+    text: truncate(text, MAX_BUTTON_TEMPLATE_TEXT_LENGTH),
+    buttons
+  };
+}
+function hasUnsupportedElements(children) {
+  for (const child of children) {
+    if (child.type === "table") {
+      return true;
+    }
+    if (child.type === "section" && hasUnsupportedElements(child.children)) {
+      return true;
+    }
+    if (child.type === "actions") {
+      for (const action of child.children) {
+        if (action.type === "select" || action.type === "radio_select") {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+function findActions(children) {
+  for (const child of children) {
+    if (child.type === "actions") {
+      return child;
+    }
+    if (child.type === "section") {
+      const nested = findActions(child.children);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+  return null;
+}
+function extractButtons(actions) {
+  const buttons = [];
+  for (const child of actions.children) {
+    if (child.type === "button" && child.id) {
+      buttons.push(convertButton(child));
+    } else if (child.type === "link-button") {
+      buttons.push(convertLinkButton(child));
+    }
+  }
+  if (buttons.length === 0) {
+    return null;
+  }
+  return buttons.slice(0, MAX_BUTTONS);
+}
+function convertButton(button) {
+  return {
+    type: "postback",
+    title: truncate(button.label, MAX_BUTTON_TITLE_LENGTH),
+    payload: encodeMessengerCallbackData(button.id, button.value)
+  };
+}
+function convertLinkButton(button) {
+  return {
+    type: "web_url",
+    title: truncate(button.label, MAX_BUTTON_TITLE_LENGTH),
+    url: button.url
+  };
+}
+function buildBodyText(card) {
+  const parts = [];
+  for (const child of card.children) {
+    if (child.type === "actions") {
+      continue;
+    }
+    const text = childToPlainText(child);
+    if (text) {
+      parts.push(text);
+    }
+  }
+  return parts.join("\n");
+}
+function renderChild(child) {
+  switch (child.type) {
+    case "text":
+      return renderText(child);
+    case "fields":
+      return renderFields(child);
+    case "actions":
+      return renderActions(child);
+    case "section":
+      return child.children.flatMap(renderChild);
+    case "image":
+      if (child.alt) {
+        return [`${child.alt}: ${child.url}`];
+      }
+      return [child.url];
+    case "divider":
+      return ["---"];
+    case "link":
+      return [`${child.label}: ${child.url}`];
+    case "table":
+      return renderTable(child);
+    default:
+      return [];
+  }
+}
+function renderText(text) {
+  return [text.content];
+}
+function renderFields(fields) {
+  return fields.children.map((field) => `${field.label}: ${field.value}`);
+}
+function renderActions(actions) {
+  const buttonTexts = actions.children.map((button) => {
+    if (button.type === "link-button") {
+      return `${button.label}: ${button.url}`;
+    }
+    return `[${button.label}]`;
+  });
+  return [buttonTexts.join(" | ")];
+}
+function renderTable(table) {
+  if (table.type !== "table") {
+    return [];
+  }
+  const lines = [];
+  if (table.headers.length > 0) {
+    lines.push(table.headers.join(" | "));
+    lines.push(table.headers.map(() => "---").join(" | "));
+  }
+  for (const row of table.rows) {
+    lines.push(row.join(" | "));
+  }
+  return lines;
+}
+function childToPlainText(child) {
+  switch (child.type) {
+    case "text":
+      return child.content;
+    case "fields":
+      return child.children.map((f) => `${f.label}: ${f.value}`).join("\n");
+    case "actions":
+      return null;
+    case "section":
+      return child.children.map(childToPlainText).filter(Boolean).join("\n");
+    case "link":
+      return `${child.label}: ${child.url}`;
+    default:
+      return null;
+  }
+}
+function truncate(text, maxLength) {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, maxLength - 1)}\u2026`;
+}
+
+// src/markdown.ts
+import {
+  BaseFormatConverter,
+  parseMarkdown,
+  stringifyMarkdown
+} from "chat";
+var MessengerFormatConverter = class extends BaseFormatConverter {
+  fromAst(ast) {
+    return stringifyMarkdown(ast).trim();
+  }
+  toAst(text) {
+    return parseMarkdown(text);
+  }
+  renderPostable(message) {
+    if (typeof message === "string") {
+      return message;
+    }
+    if ("raw" in message) {
+      return message.raw;
+    }
+    if ("markdown" in message) {
+      return this.fromMarkdown(message.markdown);
+    }
+    if ("ast" in message) {
+      return this.fromAst(message.ast);
+    }
+    return super.renderPostable(message);
+  }
+};
+
+// src/index.ts
+var GRAPH_API_BASE = "https://graph.facebook.com";
+var DEFAULT_API_VERSION = "v21.0";
+var MESSENGER_MESSAGE_LIMIT = 2e3;
+var MESSAGE_SEQUENCE_PATTERN = /:(\d+)$/;
+var MessengerAdapter = class {
+  name = "messenger";
+  appSecret;
+  pageAccessToken;
+  verifyToken;
+  apiVersion;
+  logger;
+  formatConverter = new MessengerFormatConverter();
+  messageCache = /* @__PURE__ */ new Map();
+  userProfileCache = /* @__PURE__ */ new Map();
+  chat = null;
+  _botUserId;
+  _userName;
+  hasExplicitUserName;
+  get botUserId() {
+    return this._botUserId;
+  }
+  get userName() {
+    return this._userName;
+  }
+  constructor(config) {
+    this.appSecret = config.appSecret;
+    this.pageAccessToken = config.pageAccessToken;
+    this.verifyToken = config.verifyToken;
+    this.apiVersion = config.apiVersion ?? DEFAULT_API_VERSION;
+    this.logger = config.logger;
+    this._userName = config.userName ?? "bot";
+    this.hasExplicitUserName = Boolean(config.userName);
+  }
+  async initialize(chat) {
+    this.chat = chat;
+    if (!this.hasExplicitUserName) {
+      this._userName = chat.getUserName();
+    }
+    try {
+      const me = await this.graphApiFetch(
+        "me",
+        "GET"
+      );
+      this._botUserId = me.id;
+      if (!this.hasExplicitUserName && me.name) {
+        this._userName = me.name;
+      }
+      this.logger.info("Messenger adapter initialized", {
+        botUserId: this._botUserId,
+        userName: this._userName
+      });
+    } catch (error) {
+      this.logger.warn("Failed to fetch Messenger page identity", {
+        error: String(error)
+      });
+    }
+  }
+  async handleWebhook(request, options) {
+    if (request.method === "GET") {
+      return this.handleVerification(request);
+    }
+    const body = await request.text();
+    if (!this.verifySignature(request, body)) {
+      this.logger.warn("Messenger webhook rejected due to invalid signature");
+      return new Response("Invalid signature", { status: 403 });
+    }
+    let payload;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      return new Response("Invalid JSON", { status: 400 });
+    }
+    if (payload.object !== "page") {
+      return new Response("Not a page subscription", { status: 404 });
+    }
+    if (!this.chat) {
+      this.logger.warn(
+        "Chat instance not initialized, ignoring Messenger webhook"
+      );
+      return new Response("EVENT_RECEIVED", { status: 200 });
+    }
+    for (const entry of payload.entry) {
+      for (const event of entry.messaging) {
+        if (event.message && !event.message.is_echo) {
+          this.handleIncomingMessage(event, options);
+        }
+        if (event.message?.is_echo) {
+          this.handleEcho(event);
+        }
+        if (event.postback) {
+          this.handlePostback(event, options);
+        }
+        if (event.reaction) {
+          this.handleReaction(event, options);
+        }
+        if (event.delivery) {
+          this.logger.debug("Message delivery confirmation", {
+            watermark: event.delivery.watermark,
+            mids: event.delivery.mids
+          });
+        }
+        if (event.read) {
+          this.logger.debug("Message read confirmation", {
+            watermark: event.read.watermark
+          });
+        }
+      }
+    }
+    return new Response("EVENT_RECEIVED", { status: 200 });
+  }
+  handleVerification(request) {
+    const url = new URL(request.url);
+    const mode = url.searchParams.get("hub.mode");
+    const token = url.searchParams.get("hub.verify_token");
+    const challenge = url.searchParams.get("hub.challenge");
+    if (mode === "subscribe" && token === this.verifyToken) {
+      this.logger.info("Messenger webhook verified");
+      return new Response(challenge ?? "", { status: 200 });
+    }
+    this.logger.warn("Messenger webhook verification failed");
+    return new Response("Forbidden", { status: 403 });
+  }
+  verifySignature(request, body) {
+    const signature = request.headers.get("x-hub-signature-256");
+    if (!signature) {
+      return false;
+    }
+    const [algo, hash] = signature.split("=");
+    if (algo !== "sha256" || !hash) {
+      return false;
+    }
+    try {
+      const computedHash = createHmac("sha256", this.appSecret).update(body, "utf8").digest("hex");
+      return timingSafeEqual(
+        Buffer.from(hash, "hex"),
+        Buffer.from(computedHash, "hex")
+      );
+    } catch {
+      this.logger.warn("Failed to verify Messenger webhook signature");
+      return false;
+    }
+  }
+  handleIncomingMessage(event, options) {
+    if (!this.chat) {
+      return;
+    }
+    const threadId = this.encodeThreadId({
+      recipientId: event.sender.id
+    });
+    const parsedMessage = this.parseMessengerMessage(event, threadId);
+    this.cacheMessage(parsedMessage);
+    this.chat.processMessage(this, threadId, parsedMessage, options);
+  }
+  handlePostback(event, options) {
+    if (!(this.chat && event.postback)) {
+      return;
+    }
+    const threadId = this.encodeThreadId({
+      recipientId: event.sender.id
+    });
+    const { actionId, value } = decodeMessengerCallbackData(
+      event.postback.payload
+    );
+    this.chat.processAction(
+      {
+        adapter: this,
+        actionId,
+        value,
+        messageId: event.postback.mid ?? `postback:${event.timestamp}`,
+        threadId,
+        user: {
+          userId: event.sender.id,
+          userName: event.sender.id,
+          fullName: event.sender.id,
+          isBot: false,
+          isMe: false
+        },
+        raw: event
+      },
+      options
+    );
+  }
+  handleEcho(event) {
+    if (!event.message) {
+      return;
+    }
+    const threadId = this.encodeThreadId({
+      recipientId: event.recipient.id
+    });
+    const parsedMessage = this.parseMessengerMessage(event, threadId);
+    this.cacheMessage(parsedMessage);
+  }
+  handleReaction(event, options) {
+    if (!(this.chat && event.reaction)) {
+      return;
+    }
+    const threadId = this.encodeThreadId({
+      recipientId: event.sender.id
+    });
+    const added = event.reaction.action === "react";
+    this.chat.processReaction(
+      {
+        adapter: this,
+        threadId,
+        messageId: event.reaction.mid,
+        emoji: defaultEmojiResolver.fromGChat(event.reaction.emoji),
+        rawEmoji: event.reaction.emoji,
+        added,
+        user: {
+          userId: event.sender.id,
+          userName: event.sender.id,
+          fullName: event.sender.id,
+          isBot: false,
+          isMe: false
+        },
+        raw: event
+      },
+      options
+    );
+  }
+  async postMessage(threadId, message) {
+    const card = extractCard(message);
+    if (card) {
+      const cardResult = cardToMessenger(card);
+      if (cardResult.type === "template") {
+        const convertedPayload = JSON.parse(
+          convertEmojiPlaceholders(
+            JSON.stringify(cardResult.payload),
+            "messenger"
+          )
+        );
+        return this.sendTemplateMessage(threadId, convertedPayload);
+      }
+      return this.sendTextMessage(
+        threadId,
+        convertEmojiPlaceholders(cardResult.text, "messenger")
+      );
+    }
+    const text = convertEmojiPlaceholders(
+      this.formatConverter.renderPostable(message),
+      "messenger"
+    );
+    return this.sendTextMessage(threadId, text);
+  }
+  /**
+   * Send a plain text message.
+   */
+  async sendTextMessage(threadId, text) {
+    const { recipientId } = this.resolveThreadId(threadId);
+    const truncatedText = this.truncateMessage(text);
+    if (!truncatedText.trim()) {
+      throw new ValidationError("messenger", "Message text cannot be empty");
+    }
+    const result = await this.graphApiFetch(
+      "me/messages",
+      "POST",
+      {
+        recipient: { id: recipientId },
+        message: { text: truncatedText },
+        messaging_type: "RESPONSE"
+      }
+    );
+    const rawMessage = {
+      sender: { id: this._botUserId ?? "" },
+      recipient: { id: recipientId },
+      timestamp: Date.now(),
+      message: {
+        mid: result.message_id,
+        text: truncatedText,
+        is_echo: true
+      }
+    };
+    const parsedMessage = this.parseMessengerMessage(rawMessage, threadId);
+    this.cacheMessage(parsedMessage);
+    return {
+      id: result.message_id,
+      threadId,
+      raw: rawMessage
+    };
+  }
+  /**
+   * Send a template message (Generic or Button template).
+   */
+  async sendTemplateMessage(threadId, payload) {
+    const { recipientId } = this.resolveThreadId(threadId);
+    const result = await this.graphApiFetch(
+      "me/messages",
+      "POST",
+      {
+        recipient: { id: recipientId },
+        message: {
+          attachment: {
+            type: "template",
+            payload
+          }
+        },
+        messaging_type: "RESPONSE"
+      }
+    );
+    const rawMessage = {
+      sender: { id: this._botUserId ?? "" },
+      recipient: { id: recipientId },
+      timestamp: Date.now(),
+      message: {
+        mid: result.message_id,
+        is_echo: true
+      }
+    };
+    const parsedMessage = this.parseMessengerMessage(rawMessage, threadId);
+    this.cacheMessage(parsedMessage);
+    return {
+      id: result.message_id,
+      threadId,
+      raw: rawMessage
+    };
+  }
+  async editMessage(_threadId, _messageId, _message) {
+    throw new ValidationError(
+      "messenger",
+      "Messenger does not support editing messages"
+    );
+  }
+  /**
+   * Buffer all stream chunks and send as a single message.
+   * Messenger doesn't support message editing, so we can't do incremental updates.
+   */
+  async stream(threadId, textStream, _options) {
+    let accumulated = "";
+    for await (const chunk of textStream) {
+      if (typeof chunk === "string") {
+        accumulated += chunk;
+      } else if (chunk.type === "markdown_text") {
+        accumulated += chunk.text;
+      }
+    }
+    return this.postMessage(threadId, { markdown: accumulated });
+  }
+  async deleteMessage(_threadId, _messageId) {
+    throw new ValidationError(
+      "messenger",
+      "Messenger does not support deleting messages"
+    );
+  }
+  async addReaction(_threadId, _messageId, _emoji) {
+    throw new ValidationError(
+      "messenger",
+      "Messenger does not support reactions via API"
+    );
+  }
+  async removeReaction(_threadId, _messageId, _emoji) {
+    throw new ValidationError(
+      "messenger",
+      "Messenger does not support reactions via API"
+    );
+  }
+  async startTyping(threadId) {
+    const { recipientId } = this.resolveThreadId(threadId);
+    await this.graphApiFetch("me/messages", "POST", {
+      recipient: { id: recipientId },
+      sender_action: "typing_on"
+    });
+  }
+  async fetchMessages(threadId, options = {}) {
+    const messages = [...this.messageCache.get(threadId) ?? []].sort(
+      (a, b) => this.compareMessages(a, b)
+    );
+    return this.paginateMessages(messages, options);
+  }
+  async fetchMessage(_threadId, messageId) {
+    return this.findCachedMessage(messageId) ?? null;
+  }
+  async fetchThread(threadId) {
+    const { recipientId } = this.resolveThreadId(threadId);
+    const profile = await this.fetchUserProfile(recipientId);
+    const displayName = this.profileDisplayName(profile);
+    return {
+      id: threadId,
+      channelId: threadId,
+      channelName: displayName,
+      isDM: true,
+      metadata: { profile }
+    };
+  }
+  async fetchChannelInfo(channelId) {
+    const { recipientId } = this.resolveThreadId(channelId);
+    const profile = await this.fetchUserProfile(recipientId);
+    const displayName = this.profileDisplayName(profile);
+    return {
+      id: channelId,
+      name: displayName,
+      isDM: true,
+      metadata: { profile }
+    };
+  }
+  /**
+   * On Messenger every conversation is a 1:1 DM, so channel === thread.
+   */
+  channelIdFromThreadId(threadId) {
+    return threadId;
+  }
+  async openDM(userId) {
+    return this.encodeThreadId({ recipientId: userId });
+  }
+  isDM(_threadId) {
+    return true;
+  }
+  encodeThreadId(platformData) {
+    return `messenger:${platformData.recipientId}`;
+  }
+  decodeThreadId(threadId) {
+    const parts = threadId.split(":");
+    if (parts[0] !== "messenger" || parts.length !== 2) {
+      throw new ValidationError(
+        "messenger",
+        `Invalid Messenger thread ID: ${threadId}`
+      );
+    }
+    const recipientId = parts[1];
+    if (!recipientId) {
+      throw new ValidationError(
+        "messenger",
+        `Invalid Messenger thread ID: ${threadId}`
+      );
+    }
+    return { recipientId };
+  }
+  parseMessage(raw) {
+    const threadId = this.encodeThreadId({
+      recipientId: raw.sender.id
+    });
+    const message = this.parseMessengerMessage(raw, threadId);
+    this.cacheMessage(message);
+    return message;
+  }
+  renderFormatted(content) {
+    return this.formatConverter.fromAst(content);
+  }
+  parseMessengerMessage(event, threadId) {
+    const text = event.message?.text ?? event.postback?.title ?? "";
+    const isEcho = event.message?.is_echo ?? false;
+    const isMe = isEcho || event.sender.id === this._botUserId;
+    return new Message({
+      id: event.message?.mid ?? `event:${event.timestamp}`,
+      threadId,
+      text,
+      formatted: this.formatConverter.toAst(text),
+      raw: event,
+      author: {
+        userId: event.sender.id,
+        userName: event.sender.id,
+        fullName: event.sender.id,
+        isBot: isMe,
+        isMe
+      },
+      metadata: {
+        dateSent: new Date(event.timestamp),
+        edited: false
+      },
+      attachments: this.extractAttachments(event),
+      isMention: true
+    });
+  }
+  extractAttachments(event) {
+    if (!event.message?.attachments) {
+      return [];
+    }
+    return event.message.attachments.filter((attachment) => attachment.payload?.url).map((attachment) => {
+      const url = attachment.payload?.url;
+      return {
+        type: this.mapAttachmentType(attachment.type),
+        url,
+        fetchData: url ? async () => this.downloadAttachment(url) : void 0
+      };
+    });
+  }
+  mapAttachmentType(fbType) {
+    switch (fbType) {
+      case "image":
+        return "image";
+      case "video":
+        return "video";
+      case "audio":
+        return "audio";
+      default:
+        return "file";
+    }
+  }
+  async downloadAttachment(url) {
+    let response;
+    try {
+      response = await fetch(url);
+    } catch (error) {
+      throw new NetworkError(
+        "messenger",
+        "Failed to download Messenger attachment",
+        error instanceof Error ? error : void 0
+      );
+    }
+    if (!response.ok) {
+      throw new NetworkError(
+        "messenger",
+        `Failed to download Messenger attachment: ${response.status}`
+      );
+    }
+    return Buffer.from(await response.arrayBuffer());
+  }
+  async fetchUserProfile(userId) {
+    const cached = this.userProfileCache.get(userId);
+    if (cached) {
+      return cached;
+    }
+    try {
+      const profile = await this.graphApiFetch(
+        userId,
+        "GET",
+        void 0,
+        { fields: "first_name,last_name,profile_pic" }
+      );
+      this.userProfileCache.set(userId, profile);
+      return profile;
+    } catch {
+      return { id: userId };
+    }
+  }
+  profileDisplayName(profile) {
+    const parts = [profile.first_name, profile.last_name].filter(Boolean);
+    return parts.join(" ") || profile.id;
+  }
+  resolveThreadId(value) {
+    if (value.startsWith("messenger:")) {
+      return this.decodeThreadId(value);
+    }
+    return { recipientId: value };
+  }
+  truncateMessage(text) {
+    if (text.length <= MESSENGER_MESSAGE_LIMIT) {
+      return text;
+    }
+    return `${text.slice(0, MESSENGER_MESSAGE_LIMIT - 3)}...`;
+  }
+  paginateMessages(messages, options) {
+    const limit = Math.max(1, Math.min(options.limit ?? 50, 100));
+    const direction = options.direction ?? "backward";
+    if (messages.length === 0) {
+      return { messages: [] };
+    }
+    const messageIndexById = new Map(
+      messages.map((message, index) => [message.id, index])
+    );
+    if (direction === "backward") {
+      const end2 = options.cursor && messageIndexById.has(options.cursor) ? messageIndexById.get(options.cursor) ?? messages.length : messages.length;
+      const start2 = Math.max(0, end2 - limit);
+      const page2 = messages.slice(start2, end2);
+      return {
+        messages: page2,
+        nextCursor: start2 > 0 ? page2[0]?.id : void 0
+      };
+    }
+    const start = options.cursor && messageIndexById.has(options.cursor) ? (messageIndexById.get(options.cursor) ?? -1) + 1 : 0;
+    const end = Math.min(messages.length, start + limit);
+    const page = messages.slice(start, end);
+    return {
+      messages: page,
+      nextCursor: end < messages.length ? page.at(-1)?.id : void 0
+    };
+  }
+  cacheMessage(message) {
+    const existing = this.messageCache.get(message.threadId) ?? [];
+    const index = existing.findIndex((item) => item.id === message.id);
+    if (index >= 0) {
+      existing[index] = message;
+    } else {
+      existing.push(message);
+    }
+    existing.sort((a, b) => this.compareMessages(a, b));
+    this.messageCache.set(message.threadId, existing);
+  }
+  findCachedMessage(messageId) {
+    for (const messages of this.messageCache.values()) {
+      const found = messages.find((message) => message.id === messageId);
+      if (found) {
+        return found;
+      }
+    }
+    return void 0;
+  }
+  compareMessages(a, b) {
+    const timeDiff = a.metadata.dateSent.getTime() - b.metadata.dateSent.getTime();
+    if (timeDiff !== 0) {
+      return timeDiff;
+    }
+    return this.messageSequence(a.id) - this.messageSequence(b.id);
+  }
+  messageSequence(messageId) {
+    const match = messageId.match(MESSAGE_SEQUENCE_PATTERN);
+    return match ? Number.parseInt(match[1], 10) : 0;
+  }
+  async graphApiFetch(endpoint, method, body, queryParams) {
+    const url = new URL(`${GRAPH_API_BASE}/${this.apiVersion}/${endpoint}`);
+    url.searchParams.set("access_token", this.pageAccessToken);
+    if (queryParams) {
+      for (const [key, value] of Object.entries(queryParams)) {
+        url.searchParams.set(key, value);
+      }
+    }
+    let response;
+    try {
+      response = await fetch(url.toString(), {
+        method,
+        headers: method === "POST" ? { "Content-Type": "application/json" } : void 0,
+        body: body ? JSON.stringify(body) : void 0
+      });
+    } catch (error) {
+      throw new NetworkError(
+        "messenger",
+        `Network error calling Messenger Graph API ${endpoint}`,
+        error instanceof Error ? error : void 0
+      );
+    }
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new NetworkError(
+        "messenger",
+        `Failed to parse Messenger API response for ${endpoint}`
+      );
+    }
+    if (!response.ok) {
+      this.throwGraphApiError(endpoint, response.status, data);
+    }
+    return data;
+  }
+  throwGraphApiError(endpoint, status, data) {
+    const error = data.error;
+    const message = error?.message ?? `Messenger API ${endpoint} failed`;
+    const code = error?.code ?? status;
+    if (status === 429 || code === 4 || code === 32 || code === 613) {
+      throw new AdapterRateLimitError("messenger");
+    }
+    if (status === 401 || code === 190) {
+      throw new AuthenticationError("messenger", message);
+    }
+    if (status === 403 || code === 10 || code === 200) {
+      throw new ValidationError("messenger", message);
+    }
+    if (status === 404) {
+      throw new ResourceNotFoundError("messenger", endpoint);
+    }
+    throw new NetworkError(
+      "messenger",
+      `${message} (status ${status}, code ${code})`
+    );
+  }
+};
+function createMessengerAdapter(config) {
+  const appSecret = config?.appSecret ?? process.env.FACEBOOK_APP_SECRET;
+  if (!appSecret) {
+    throw new ValidationError(
+      "messenger",
+      "appSecret is required. Set FACEBOOK_APP_SECRET or provide it in config."
+    );
+  }
+  const pageAccessToken = config?.pageAccessToken ?? process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+  if (!pageAccessToken) {
+    throw new ValidationError(
+      "messenger",
+      "pageAccessToken is required. Set FACEBOOK_PAGE_ACCESS_TOKEN or provide it in config."
+    );
+  }
+  const verifyToken = config?.verifyToken ?? process.env.FACEBOOK_VERIFY_TOKEN;
+  if (!verifyToken) {
+    throw new ValidationError(
+      "messenger",
+      "verifyToken is required. Set FACEBOOK_VERIFY_TOKEN or provide it in config."
+    );
+  }
+  return new MessengerAdapter({
+    appSecret,
+    pageAccessToken,
+    verifyToken,
+    apiVersion: config?.apiVersion,
+    logger: config?.logger ?? new ConsoleLogger("info").child("messenger"),
+    userName: config?.userName
+  });
+}
+export {
+  MessengerAdapter,
+  MessengerFormatConverter,
+  cardToMessenger,
+  cardToMessengerText,
+  createMessengerAdapter,
+  decodeMessengerCallbackData,
+  encodeMessengerCallbackData
+};
+//# sourceMappingURL=index.js.map

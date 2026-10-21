@@ -1,0 +1,28 @@
+import type { Adapter } from './adapters.js';
+import type { AI } from './ai/index.js';
+import type { LogLevel } from './log.js';
+export type ConfigPartial = {
+    locales: [string, ...string[]];
+    fallback: Record<string, string>;
+    localesDir: string;
+    ai: AI | null;
+    logLevel: LogLevel;
+};
+export type DevMode = false | 'read' | 'add' | 'refs' | 'clean';
+export type Config = ConfigPartial & {
+    adapters: Record<string, Adapter>;
+    dev: DevMode;
+};
+export type DeepPartial<T> = {
+    [K in keyof T]?: T[K] extends (infer A)[] ? DeepPartial<A>[] : T[K] extends (...args: any[]) => any ? T[K] : T[K] extends object ? DeepPartial<T[K]> : T[K];
+};
+type ConfigWithOptional = DeepPartial<Config>;
+export declare const defaultConfig: Config;
+/** mutates the target, and returns */
+export declare function fillDefaults<T extends {}>(target: DeepPartial<T>, defaults: T): T;
+export declare function defineConfig(config: ConfigWithOptional): DeepPartial<Config>;
+export declare const defaultConfigNames: string[];
+export declare const getLanguageName: (code: string) => string;
+export declare function checkValidLocale(locale: string): void;
+export declare function getConfig(configPath?: string): Promise<Config>;
+export {};

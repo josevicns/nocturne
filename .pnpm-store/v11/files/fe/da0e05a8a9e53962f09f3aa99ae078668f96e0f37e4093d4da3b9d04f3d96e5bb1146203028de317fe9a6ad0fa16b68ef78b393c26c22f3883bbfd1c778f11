@@ -1,0 +1,233 @@
+import { dirname, resolve } from 'node:path';
+import PO from 'pofile';
+import { getKey } from './adapters.js';
+import { fillDefaults } from './config.js';
+import { itemIsObsolete, } from './storage.js';
+const urlAdapterFlagPrefix = 'url:';
+function join(parts, sep) {
+    return parts.map(s => s.replaceAll('\\', '\\\\').replaceAll(sep, `\\${sep}`)).join(sep);
+}
+function split(str, sep, count) {
+    return str
+        .split(new RegExp(`(?<!\\\\)${sep}`), count)
+        .map(s => s.replaceAll(`\\${sep}`, sep).replaceAll('\\\\', '\\'));
+}
+function itemToPOItem(item, locale, sourceLocale) {
+    const poi = new PO.Item();
+    const id = item.translations.get(sourceLocale);
+    poi.msgid = id[0];
+    poi.msgid_plural = id[1];
+    poi.msgstr = item.translations.get(locale);
+    if (item.context) {
+        poi.msgctxt = item.context;
+    }
+    for (const ref of item.references) {
+        for (const entry of ref.refs) {
+            poi.references.push(ref.file);
+            if (entry === null) {
+                poi.extractedComments.push('');
+                continue;
+            }
+            const comm = [];
+            if (entry.link) {
+                comm.push(entry.link);
+            }
+            for (const [i, ph] of entry.placeholders) {
+                comm.push(join([String(i), ph], ': '));
+            }
+            poi.extractedComments.push(join(comm, '; '));
+        }
+    }
+    if (!poi.extractedComments.some(c => c !== '')) {
+        poi.extractedComments = [];
+    }
+    const additionals = item['additionals'] ?? new Map();
+    poi.comments = additionals.get(locale)?.comments ?? [];
+    poi.flags = additionals.get(locale)?.flags ?? {};
+    for (const key of item.urlAdapters) {
+        poi.flags[`${urlAdapterFlagPrefix}${key}`] = true;
+    }
+    poi.obsolete = itemIsObsolete(item);
+    return poi;
+}
+function poitemToItemCommons(poi) {
+    const references = [];
+    let lastRef = { file: '', refs: [] };
+    const urlAdapters = [];
+    for (const key in poi.flags) {
+        if (key.startsWith(urlAdapterFlagPrefix)) {
+            urlAdapters.push(key.slice(urlAdapterFlagPrefix.length));
+        }
+    }
+    for (const [i, ref] of poi.references.entries()) {
+        if (ref !== lastRef.file) {
+            lastRef = { file: ref, refs: [] };
+            references.push(lastRef);
+        }
+        const comm = poi.extractedComments[i]?.trim();
+        if (!comm) {
+            lastRef.refs.push(null);
+            continue;
+        }
+        const refEnt = { placeholders: [] };
+        const commSp = split(comm, '; ');
+        let phStart = 0;
+        if (urlAdapters.length) {
+            // url
+            refEnt.link = commSp[0];
+            phStart++;
+        }
+        for (const c of commSp.slice(phStart)) {
+            const [i, ph] = split(c, ': ', 2);
+            refEnt.placeholders.push([i, ph]);
+        }
+        lastRef.refs.push(refEnt);
+    }
+    return {
+        translations: new Map(),
+        context: poi.msgctxt,
+        references,
+        urlAdapters,
+    };
+}
+function getItemId(poItem) {
+    const id = [poItem.msgid];
+    if (poItem.msgid_plural) {
+        id.push(poItem.msgid_plural);
+    }
+    return id;
+}
+function poitemsToItems(poItems, locales, sourceLocale) {
+    // then merge them
+    const items = [];
+    for (const poIs of poItems) {
+        const basePoOtem = poIs.values().next().value; // ! as poIs exists because at least one exists
+        const item = poitemToItemCommons(basePoOtem);
+        const additionals = new Map();
+        for (const loc of locales) {
+            const poi = poIs.get(loc);
+            item.translations.set(loc, poi?.msgstr ?? (loc === sourceLocale ? getItemId(basePoOtem) : []));
+            const add = {
+                comments: poi?.comments ?? [],
+                flags: {},
+            };
+            for (const [k, v] of Object.entries(poi?.flags ?? {})) {
+                if (!k.startsWith(urlAdapterFlagPrefix)) {
+                    add.flags[k] = v;
+                }
+            }
+            additionals.set(loc, add);
+        }
+        item['additionals'] = additionals;
+        items.push(item);
+    }
+    return items;
+}
+export const defaultOpts = {
+    location: 'src/locales/{locale}.po',
+};
+export class POFile {
+    key;
+    opts;
+    filesByLoc = new Map(); // main and url
+    files = [];
+    fileExistsCache = new Map();
+    constructor(opts) {
+        this.opts = opts;
+        opts.location = resolve(opts.root, opts.location);
+        this.key = opts.location;
+        for (const locale of opts.locales) {
+            const location = opts.location.replace('{locale}', locale);
+            this.filesByLoc.set(locale, location);
+            this.files.push(location);
+        }
+    }
+    async loadRaw(locale) {
+        const filename = this.filesByLoc.get(locale);
+        const content = await this.opts.fs.read(filename);
+        this.fileExistsCache.set(filename, content != null);
+        return content == null ? null : PO.parse(content);
+    }
+    async load() {
+        const pluralRules = new Map();
+        // by key, then by locale
+        const poItems = new Map();
+        // first, group by key
+        for (const locale of this.opts.locales) {
+            const po = await this.loadRaw(locale);
+            if (po == null) {
+                continue;
+            }
+            const pluralHeader = po.headers['Plural-Forms'];
+            if (pluralHeader) {
+                const pluralRule = PO.parsePluralForms(pluralHeader);
+                pluralRule.nplurals = Number(pluralRule.nplurals);
+                pluralRules.set(locale, pluralRule);
+            }
+            for (const poItem of po.items) {
+                const key = getKey(getItemId(poItem), poItem.msgctxt);
+                if (!poItems.has(key)) {
+                    poItems.set(key, new Map());
+                }
+                poItems.get(key)?.set(locale, poItem);
+            }
+        }
+        return {
+            items: poitemsToItems(poItems.values(), this.opts.locales, this.opts.sourceLocale),
+            pluralRules,
+        };
+    }
+    async saveRaw(items, headers, locale) {
+        const filename = this.filesByLoc.get(locale);
+        if (items.length === 0) {
+            if (this.fileExistsCache.get(filename) === false) {
+                return;
+            }
+            await this.opts.fs.unlink(filename);
+            this.fileExistsCache.set(filename, false);
+            return;
+        }
+        const po = new PO();
+        po.headers = headers;
+        po.items = items;
+        await this.opts.fs.write(filename, po.toString());
+        this.fileExistsCache.set(filename, true);
+    }
+    async save(data) {
+        await Promise.all(this.opts.locales.map(locale => {
+            const poItems = [];
+            for (const item of data.items) {
+                const poItem = itemToPOItem(item, locale, this.opts.sourceLocale);
+                poItems.push(poItem);
+            }
+            const headers = this.getHeaders(locale, data.pluralRules.get(locale));
+            return this.saveRaw(poItems, headers, locale);
+        }));
+    }
+    getHeaders(locale, pluralRule) {
+        const updateHeaders = [
+            ['Plural-Forms', `nplurals=${pluralRule.nplurals}; plural=${pluralRule.plural};`],
+            ['Source-Language', this.opts.sourceLocale],
+            ['Language', locale],
+            ['MIME-Version', '1.0'],
+            ['Content-Type', 'text/plain; charset=utf-8'],
+            ['Content-Transfer-Encoding', '8bit'],
+        ];
+        const headers = {};
+        for (const [key, val] of updateHeaders) {
+            headers[key] = val;
+        }
+        return headers;
+    }
+}
+export function pofile(pofOpts = {}) {
+    return async (opts) => {
+        const defaultLocation = resolve(opts.root, opts.localesDir, '{locale}.po');
+        const fullOpts = fillDefaults(pofOpts, { ...defaultOpts, location: defaultLocation });
+        await opts.fs.mkdir(dirname(resolve(opts.root, fullOpts.location))); // create once
+        if (!fullOpts.location.includes('{locale}')) {
+            throw new Error('PO file `location` config has to include `{locale}`');
+        }
+        return new POFile({ ...opts, ...fullOpts });
+    };
+}

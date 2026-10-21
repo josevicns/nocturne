@@ -1,0 +1,163 @@
+import { area as d3Area, areaRadial } from 'd3-shape';
+import { min } from 'd3-array';
+import { interpolatePath } from 'd3-interpolate-path';
+import { accessor } from '../../utils/common.js';
+import { isScaleBand } from '../../utils/scales.svelte.js';
+import { flattenPathData } from '../../utils/path.js';
+import { createMotion, extractTweenConfig, } from '../../utils/motion.svelte.js';
+import { getChartContext } from '../../contexts/chart.js';
+/**
+ * Reactive state shared by every per-layer Area variant. Holds the
+ * computed `d` (path data), tween state, accessors, and `lineYAccessor`.
+ */
+export class AreaState {
+    #getProps = () => ({});
+    /**
+     * Memoized props — the component's props closure allocates a fresh object
+     * (it spreads `rest`), so calling it once per derived meant one allocation
+     * per derived per update. Read it once here instead.
+     */
+    #props = $derived(this.#getProps());
+    ctx = getChartContext();
+    #tweenState;
+    constructor(getProps) {
+        this.#getProps = getProps;
+        const initial = getProps();
+        this.ctx.registerComponent({
+            name: 'Area',
+            kind: 'composite-mark',
+            markInfo: () => {
+                const p = this.#props;
+                return {
+                    data: p.data,
+                    x: p.x,
+                    y: p.y1 ?? p.y0,
+                    seriesKey: p.seriesKey,
+                    color: p.fill,
+                };
+            },
+        });
+        const extractedTween = extractTweenConfig(initial.motion);
+        const tweenOptions = extractedTween
+            ? {
+                type: extractedTween.type,
+                options: { interpolate: interpolatePath, ...extractedTween.options },
+            }
+            : undefined;
+        this.#tweenState = createMotion(this.#defaultPathData(tweenOptions), () => this.d, tweenOptions);
+    }
+    series = $derived(this.ctx.series.series.find((s) => s.key === this.#props.seriesKey));
+    seriesData = $derived(this.series?.data);
+    seriesAccessor = $derived(this.series?.value ?? (this.series?.data ? undefined : this.series?.key));
+    stackAccessors = $derived.by(() => {
+        const seriesKey = this.#props.seriesKey;
+        return seriesKey && this.ctx.series.isStacked
+            ? this.ctx.series.getStackAccessors(seriesKey)
+            : null;
+    });
+    xAccessor = $derived.by(() => {
+        const x = this.#props.x;
+        return x ? accessor(x) : this.ctx.x;
+    });
+    y0Accessor = $derived.by(() => {
+        const props = this.#props;
+        if (props.y0)
+            return accessor(props.y0);
+        if (this.stackAccessors)
+            return this.stackAccessors.y0;
+        if (Array.isArray(this.seriesAccessor))
+            return accessor(this.seriesAccessor[0]);
+        if (Array.isArray(this.ctx.config.y) && this.ctx.config.y[0] === 0) {
+            return (d) => this.ctx.y(d)[0];
+        }
+        if (this.ctx.props.yBaseline != null)
+            return () => this.ctx.props.yBaseline;
+        return () => min(this.ctx.yScale.domain());
+    });
+    y1Accessor = $derived.by(() => {
+        const props = this.#props;
+        if (props.y1)
+            return accessor(props.y1);
+        if (this.stackAccessors)
+            return this.stackAccessors.y1;
+        if (Array.isArray(this.seriesAccessor))
+            return accessor(this.seriesAccessor[1]);
+        if (this.seriesAccessor)
+            return accessor(this.seriesAccessor);
+        if (Array.isArray(this.ctx.config.y) && this.ctx.config.y[1] === 1) {
+            return (d) => this.ctx.y(d)[1];
+        }
+        return this.ctx.y;
+    });
+    resolvedData = $derived(this.#props.data ?? this.seriesData ?? this.ctx.data);
+    xOffset = $derived(isScaleBand(this.ctx.xScale) ? this.ctx.xScale.bandwidth() / 2 : 0);
+    yOffset = $derived(isScaleBand(this.ctx.yScale) ? this.ctx.yScale.bandwidth() / 2 : 0);
+    #defaultPathData(tweenOptions) {
+        const props = this.#props;
+        if (!tweenOptions)
+            return '';
+        if (props.pathData) {
+            return flattenPathData(props.pathData, Math.min(this.ctx.yScale(0), this.ctx.yRange[0]));
+        }
+        if (this.ctx.config.x) {
+            const path = this.ctx.radial
+                ? areaRadial()
+                    .angle((d) => this.ctx.xScale(this.xAccessor(d)))
+                    .innerRadius(() => Math.min(this.ctx.yScale(0), this.ctx.yRange[0]))
+                    .outerRadius(() => Math.min(this.ctx.yScale(0), this.ctx.yRange[0]))
+                : d3Area()
+                    .x((d) => this.ctx.xScale(this.xAccessor(d)) + this.xOffset)
+                    .y0(() => Math.min(this.ctx.yScale(0), this.ctx.yRange[0]))
+                    .y1(() => Math.min(this.ctx.yScale(0), this.ctx.yRange[0]));
+            path.defined(props.defined ?? ((d) => this.xAccessor(d) != null && this.y1Accessor(d) != null));
+            if (props.curve)
+                path.curve(props.curve);
+            return path(this.resolvedData) ?? '';
+        }
+        return '';
+    }
+    d = $derived.by(() => {
+        const props = this.#props;
+        const _path = this.ctx.radial
+            ? areaRadial()
+                .angle((d) => this.ctx.xScale(this.xAccessor(d)))
+                .innerRadius((d) => this.ctx.yScale(this.y0Accessor(d)))
+                .outerRadius((d) => this.ctx.yScale(this.y1Accessor(d)))
+            : d3Area()
+                .x((d) => this.ctx.xScale(this.xAccessor(d)) + this.xOffset)
+                .y0((d) => this.ctx.yScale(this.y0Accessor(d)) + this.yOffset)
+                .y1((d) => this.ctx.yScale(this.y1Accessor(d)) + this.yOffset);
+        _path.defined(props.defined ?? ((d) => this.xAccessor(d) != null && this.y1Accessor(d) != null));
+        if (props.curve)
+            _path.curve(props.curve);
+        return props.pathData ?? _path(this.resolvedData) ?? '';
+    });
+    get tweenedPath() {
+        return this.#tweenState.current;
+    }
+    lineYAccessor = $derived.by(() => {
+        const props = this.#props;
+        if (this.stackAccessors && this.ctx.series.stackLayout === 'stackDiverging') {
+            const firstPoint = this.resolvedData?.[0];
+            if (firstPoint) {
+                const val = this.stackAccessors.value(firstPoint);
+                if (val && val[1] <= 0)
+                    return this.y0Accessor;
+            }
+        }
+        return props.y1 ||
+            this.stackAccessors ||
+            Array.isArray(this.seriesAccessor) ||
+            this.seriesAccessor
+            ? this.y1Accessor
+            : undefined;
+    });
+    pathOpacity = $derived.by(() => {
+        if (this.series?.key == null ||
+            this.ctx.series.visibleSeries.length <= 1 ||
+            this.ctx.series.isHighlighted(this.series.key, true)) {
+            return 1;
+        }
+        return 0.1;
+    });
+}

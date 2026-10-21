@@ -1,0 +1,530 @@
+import { BaseFormatConverter, Root, AdapterPostableMessage, Logger, Adapter, ChatInstance, WebhookOptions, Message, Attachment, RawMessage, StreamChunk, StreamOptions, EmojiValue, FetchOptions, FetchResult, ThreadInfo, FormattedContent } from 'chat';
+
+/**
+ * WhatsApp-specific format conversion using AST-based parsing.
+ *
+ * WhatsApp uses a markdown-like format with some differences from standard:
+ * - Bold: *text* (single asterisk, not double)
+ * - Italic: _text_
+ * - Strikethrough: ~text~ (single tilde, not double)
+ * - Monospace: ```text```
+ *
+ * @see https://faq.whatsapp.com/539178204879377
+ */
+
+declare class WhatsAppFormatConverter extends BaseFormatConverter {
+    /**
+     * Convert an AST to WhatsApp markdown format.
+     *
+     * Transforms unsupported nodes (headings, thematic breaks, tables)
+     * into WhatsApp-compatible equivalents, then converts standard markdown
+     * bold/strikethrough to WhatsApp syntax.
+     */
+    fromAst(ast: Root): string;
+    /**
+     * Parse WhatsApp markdown into an AST.
+     *
+     * Transforms WhatsApp-specific formatting to standard markdown first,
+     * then parses with the standard parser.
+     */
+    toAst(markdown: string): Root;
+    /**
+     * Render a postable message to WhatsApp-compatible string.
+     */
+    renderPostable(message: AdapterPostableMessage): string;
+    /**
+     * Convert remaining standard markdown markers to WhatsApp format.
+     * The stringifier already outputs _italic_ and - bullets.
+     * This only converts **bold** -> *bold* and ~~strike~~ -> ~strike~.
+     */
+    private toWhatsAppFormat;
+    /**
+     * Convert WhatsApp format to standard markdown.
+     * Converts single-asterisk bold to double-asterisk bold,
+     * and single-tilde strikethrough to double-tilde strikethrough.
+     *
+     * Careful not to convert _italic_ (which is the same in both formats).
+     */
+    private fromWhatsAppFormat;
+}
+
+/**
+ * Type definitions for the WhatsApp adapter.
+ *
+ * Based on the WhatsApp Business Cloud API (Meta Graph API).
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api
+ */
+
+/**
+ * WhatsApp adapter configuration.
+ *
+ * Requires a System User access token for API calls and an App Secret
+ * for webhook signature verification.
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/get-started
+ */
+interface WhatsAppAdapterConfig {
+    /** Access token (System User token) for WhatsApp Cloud API calls. Defaults to WHATSAPP_ACCESS_TOKEN env var. */
+    accessToken?: string;
+    /** Override the Meta Graph API base URL (e.g. for on-premise deployments). Defaults to "https://graph.facebook.com". */
+    apiUrl?: string;
+    /** Meta Graph API version (default: "v21.0") */
+    apiVersion?: string;
+    /** Meta App Secret for webhook HMAC-SHA256 signature verification. Defaults to WHATSAPP_APP_SECRET env var. */
+    appSecret?: string;
+    /** Logger instance for error reporting */
+    logger?: Logger;
+    /** WhatsApp Business phone number ID (not the phone number itself). Defaults to WHATSAPP_PHONE_NUMBER_ID env var. */
+    phoneNumberId?: string;
+    /** Bot display name used for identification */
+    userName?: string;
+    /** Verify token for webhook challenge-response verification. Defaults to WHATSAPP_VERIFY_TOKEN env var. */
+    verifyToken?: string;
+}
+/**
+ * Decoded thread ID for WhatsApp.
+ *
+ * WhatsApp conversations are always 1:1 between a business phone number
+ * and a user. There is no concept of threads or channels.
+ *
+ * Format: whatsapp:{phoneNumberId}:{userWaId}
+ */
+interface WhatsAppThreadId {
+    /** Business phone number ID */
+    phoneNumberId: string;
+    /** User's WhatsApp ID (their phone number) */
+    userWaId: string;
+}
+/**
+ * Contact information from an inbound message.
+ */
+interface WhatsAppContact {
+    profile: {
+        name: string;
+    };
+    wa_id: string;
+}
+/**
+ * Inbound message from a user.
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples
+ */
+interface WhatsAppInboundMessage {
+    /** Audio message content */
+    audio?: {
+        id: string;
+        mime_type: string;
+        sha256: string;
+        voice?: boolean;
+    };
+    /** Legacy button response (from template quick replies) */
+    button?: {
+        payload: string;
+        text: string;
+    };
+    /** Context for quoted replies */
+    context?: {
+        from: string;
+        id: string;
+    };
+    /** Document message content */
+    document?: {
+        caption?: string;
+        filename?: string;
+        id: string;
+        mime_type: string;
+        sha256: string;
+    };
+    /** Sender's WhatsApp ID */
+    from: string;
+    /** Unique message ID */
+    id: string;
+    /** Image message content */
+    image?: {
+        caption?: string;
+        id: string;
+        mime_type: string;
+        sha256: string;
+    };
+    /** Interactive message reply */
+    interactive?: {
+        button_reply?: {
+            id: string;
+            title: string;
+        };
+        list_reply?: {
+            description?: string;
+            id: string;
+            title: string;
+        };
+        type: "button_reply" | "list_reply";
+    };
+    /** Location message content */
+    location?: {
+        address?: string;
+        latitude: number;
+        longitude: number;
+        name?: string;
+        url?: string;
+    };
+    /** Reaction to a message */
+    reaction?: {
+        emoji: string;
+        message_id: string;
+    };
+    /** Sticker message content */
+    sticker?: {
+        animated: boolean;
+        id: string;
+        mime_type: string;
+        sha256: string;
+    };
+    /** Text message content */
+    text?: {
+        body: string;
+    };
+    /** Unix timestamp string */
+    timestamp: string;
+    /** Message type */
+    type: "text" | "image" | "document" | "audio" | "video" | "voice" | "sticker" | "location" | "contacts" | "interactive" | "button" | "reaction" | "order" | "system";
+    /** Video message content */
+    video?: {
+        caption?: string;
+        id: string;
+        mime_type: string;
+        sha256: string;
+    };
+    /** Voice message content */
+    voice?: {
+        id: string;
+        mime_type: string;
+        sha256: string;
+    };
+}
+/**
+ * Response from the media URL endpoint.
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media#get-media-url
+ */
+interface WhatsAppMediaResponse {
+    file_size: number;
+    id: string;
+    messaging_product: "whatsapp";
+    mime_type: string;
+    sha256: string;
+    url: string;
+}
+/**
+ * Interactive message payload for sending buttons or lists.
+ */
+interface WhatsAppInteractiveMessage {
+    action: {
+        button?: never;
+        buttons: Array<{
+            reply: {
+                id: string;
+                title: string;
+            };
+            type: "reply";
+        }>;
+        sections?: never;
+    } | {
+        button: string;
+        buttons?: never;
+        sections: Array<{
+            rows: Array<{
+                description?: string;
+                id: string;
+                title: string;
+            }>;
+            title: string;
+        }>;
+    };
+    body: {
+        text: string;
+    };
+    footer?: {
+        text: string;
+    };
+    header?: {
+        text: string;
+        type: "text";
+    };
+    type: "button" | "list";
+}
+/**
+ * Platform-specific raw message type for WhatsApp.
+ */
+interface WhatsAppRawMessage {
+    /** Contact info from the webhook */
+    contact?: WhatsAppContact;
+    /** The raw inbound message data */
+    message: WhatsAppInboundMessage;
+    /** Phone number ID that received the message */
+    phoneNumberId: string;
+}
+
+/**
+ * Split text into chunks that fit within WhatsApp's message limit,
+ * breaking on paragraph boundaries (\n\n) when possible, then line
+ * boundaries (\n), and finally at the character limit as a last resort.
+ */
+declare function splitMessage(text: string): string[];
+
+/**
+ * WhatsApp adapter for chat SDK.
+ *
+ * Supports messaging via the WhatsApp Business Cloud API (Meta Graph API).
+ * All conversations are 1:1 DMs between the business phone number and users.
+ *
+ * @example
+ * ```typescript
+ * import { Chat } from "chat";
+ * import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
+ * import { MemoryState } from "@chat-adapter/state-memory";
+ *
+ * const chat = new Chat({
+ *   userName: "my-bot",
+ *   adapters: {
+ *     whatsapp: createWhatsAppAdapter(),
+ *   },
+ *   state: new MemoryState(),
+ * });
+ * ```
+ */
+declare class WhatsAppAdapter implements Adapter<WhatsAppThreadId, WhatsAppRawMessage> {
+    readonly name = "whatsapp";
+    readonly lockScope: "channel";
+    readonly persistThreadHistory = true;
+    readonly userName: string;
+    protected readonly accessToken: string;
+    protected readonly appSecret: string;
+    protected readonly phoneNumberId: string;
+    protected readonly verifyToken: string;
+    protected readonly graphApiUrl: string;
+    protected chat: ChatInstance | null;
+    protected readonly logger: Logger;
+    protected _botUserId: string | null;
+    protected readonly formatConverter: WhatsAppFormatConverter;
+    /** Bot user ID used for self-message detection */
+    get botUserId(): string | undefined;
+    constructor(config: WhatsAppAdapterConfig & {
+        accessToken: string;
+        appSecret: string;
+        logger: Logger;
+        phoneNumberId: string;
+        userName: string;
+        verifyToken: string;
+    });
+    /**
+     * Initialize the adapter and fetch business profile info.
+     */
+    initialize(chat: ChatInstance): Promise<void>;
+    /**
+     * Handle incoming webhook from WhatsApp.
+     *
+     * Handles both the GET verification challenge and POST event notifications.
+     *
+     * @see https://developers.facebook.com/docs/whatsapp/cloud-api/guides/set-up-webhooks
+     */
+    handleWebhook(request: Request, options?: WebhookOptions): Promise<Response>;
+    /**
+     * Handle the webhook verification challenge from Meta.
+     *
+     * @see https://developers.facebook.com/docs/whatsapp/cloud-api/guides/set-up-webhooks
+     */
+    protected handleVerificationChallenge(request: Request): Response;
+    /**
+     * Verify webhook signature using HMAC-SHA256 with the App Secret.
+     *
+     * @see https://developers.facebook.com/docs/graph-api/webhooks/getting-started#verification-requests
+     */
+    protected verifySignature(body: string, signature: string | null): boolean;
+    /**
+     * Handle an inbound message from a user.
+     */
+    protected handleInboundMessage(inbound: WhatsAppInboundMessage, contact: WhatsAppContact | undefined, phoneNumberId: string, options?: WebhookOptions): void;
+    /**
+     * Handle reaction events.
+     */
+    protected handleReaction(inbound: WhatsAppInboundMessage, contact: WhatsAppContact | undefined, phoneNumberId: string, options?: WebhookOptions): void;
+    /**
+     * Handle interactive message replies (button/list selection).
+     */
+    protected handleInteractiveReply(inbound: WhatsAppInboundMessage, contact: WhatsAppContact | undefined, phoneNumberId: string, options?: WebhookOptions): void;
+    /**
+     * Handle legacy button responses (from template quick replies).
+     */
+    protected handleButtonResponse(inbound: WhatsAppInboundMessage, contact: WhatsAppContact | undefined, phoneNumberId: string, options?: WebhookOptions): void;
+    /**
+     * Extract text content from an inbound message.
+     * Returns null for unsupported message types.
+     */
+    protected extractTextContent(message: WhatsAppInboundMessage): string | null;
+    /**
+     * Build a Message from a WhatsApp inbound message.
+     */
+    protected buildMessage(inbound: WhatsAppInboundMessage, contact: WhatsAppContact | undefined, threadId: string, text: string, phoneNumberId?: string): Message<WhatsAppRawMessage>;
+    /**
+     * Build attachments from an inbound message.
+     */
+    protected buildAttachments(inbound: WhatsAppInboundMessage): Attachment[];
+    /**
+     * Build a single media attachment with a lazy fetchData function.
+     */
+    protected buildMediaAttachment(mediaId: string, type: Attachment["type"], mimeType: string, name?: string): Attachment;
+    rehydrateAttachment(attachment: Attachment): Attachment;
+    /**
+     * Download media from WhatsApp.
+     *
+     * WhatsApp media is fetched in two steps:
+     * 1. GET the media metadata to obtain the download URL
+     * 2. GET the actual binary data from the download URL
+     *
+     * @param mediaId - The media ID from the inbound message
+     * @returns The media data as a Buffer
+     *
+     * @see https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media#download-media
+     */
+    downloadMedia(mediaId: string): Promise<Buffer>;
+    /**
+     * Send a message to a WhatsApp user.
+     *
+     * @see https://developers.facebook.com/docs/whatsapp/cloud-api/messages
+     */
+    postMessage(threadId: string, message: AdapterPostableMessage): Promise<RawMessage<WhatsAppRawMessage>>;
+    /**
+     * Split text into chunks that fit within WhatsApp's message limit,
+     * breaking on paragraph boundaries (\n\n) when possible, then line
+     * boundaries (\n), and finally at the character limit as a last resort.
+     */
+    splitMessage(text: string): string[];
+    /**
+     * Send a single text message via the Cloud API (must be within the
+     * 4096-character limit).
+     */
+    protected sendSingleTextMessage(threadId: string, to: string, text: string): Promise<RawMessage<WhatsAppRawMessage>>;
+    /**
+     * Send a text message, splitting into multiple messages if it exceeds
+     * WhatsApp's 4096-character limit. Returns the last message sent.
+     */
+    protected sendTextMessage(threadId: string, to: string, text: string): Promise<RawMessage<WhatsAppRawMessage>>;
+    /**
+     * Send an interactive message (buttons or list) via the Cloud API.
+     */
+    protected sendInteractiveMessage(threadId: string, to: string, interactive: WhatsAppInteractiveMessage): Promise<RawMessage<WhatsAppRawMessage>>;
+    /**
+     * Edit a message. Not supported by WhatsApp Cloud API — throws an error.
+     *
+     * Callers should use postMessage directly if they want to send a follow-up.
+     */
+    editMessage(_threadId: string, _messageId: string, _message: AdapterPostableMessage): Promise<RawMessage<WhatsAppRawMessage>>;
+    /**
+     * Stream a message by buffering all chunks and sending as a single message.
+     * WhatsApp doesn't support message editing, so we can't do incremental updates.
+     */
+    stream(threadId: string, textStream: AsyncIterable<string | StreamChunk>, _options?: StreamOptions): Promise<RawMessage<WhatsAppRawMessage>>;
+    /**
+     * Delete a message. Not supported by WhatsApp Cloud API — throws an error.
+     */
+    deleteMessage(_threadId: string, _messageId: string): Promise<void>;
+    /**
+     * Add a reaction to a message.
+     *
+     * @see https://developers.facebook.com/docs/whatsapp/cloud-api/messages/reaction-messages
+     */
+    addReaction(threadId: string, messageId: string, emoji: EmojiValue | string): Promise<void>;
+    /**
+     * Remove a reaction from a message.
+     *
+     * @see https://developers.facebook.com/docs/whatsapp/cloud-api/messages/reaction-messages
+     */
+    removeReaction(threadId: string, messageId: string, _emoji: EmojiValue | string): Promise<void>;
+    /**
+     * Start typing indicator.
+     *
+     * WhatsApp supports typing indicators via the messages endpoint.
+     * The indicator displays for up to 25 seconds or until the next message.
+     *
+     * @see https://developers.facebook.com/docs/whatsapp/cloud-api/messages/mark-messages-as-read
+     */
+    startTyping(_threadId: string, _status?: string): Promise<void>;
+    /**
+     * Fetch messages. Not supported by WhatsApp Cloud API.
+     *
+     * WhatsApp does not provide an API to retrieve message history.
+     */
+    fetchMessages(_threadId: string, _options?: FetchOptions): Promise<FetchResult<WhatsAppRawMessage>>;
+    /**
+     * Fetch thread info.
+     */
+    fetchThread(threadId: string): Promise<ThreadInfo>;
+    /**
+     * Encode a WhatsApp thread ID.
+     *
+     * Format: whatsapp:{phoneNumberId}:{userWaId}
+     */
+    encodeThreadId(platformData: WhatsAppThreadId): string;
+    /**
+     * Decode a WhatsApp thread ID.
+     *
+     * Format: whatsapp:{phoneNumberId}:{userWaId}
+     */
+    decodeThreadId(threadId: string): WhatsAppThreadId;
+    /**
+     * Derive channel ID from a WhatsApp thread ID.
+     * On WhatsApp every conversation is a 1:1 DM, so channel === thread.
+     */
+    channelIdFromThreadId(threadId: string): string;
+    /**
+     * All WhatsApp conversations are DMs.
+     */
+    isDM(_threadId: string): boolean;
+    /**
+     * Open a DM with a user. Returns the thread ID for the conversation.
+     *
+     * For WhatsApp, this simply constructs the thread ID since all
+     * conversations are inherently DMs. Note: you can only message users
+     * who have messaged you first (within the 24-hour window) or
+     * via approved template messages.
+     */
+    openDM(userId: string): Promise<string>;
+    /**
+     * Parse platform message format to normalized format.
+     */
+    parseMessage(raw: WhatsAppRawMessage): Message<WhatsAppRawMessage>;
+    /**
+     * Render formatted content to WhatsApp markdown.
+     */
+    renderFormatted(content: FormattedContent): string;
+    /**
+     * Mark an inbound message as read.
+     *
+     * @see https://developers.facebook.com/docs/whatsapp/cloud-api/messages/mark-messages-as-read
+     */
+    markAsRead(messageId: string): Promise<void>;
+    /**
+     * Make a request to the Meta Graph API.
+     */
+    protected graphApiRequest<T = unknown>(path: string, body: unknown): Promise<T>;
+    /**
+     * Resolve an emoji value to a unicode string.
+     */
+    protected resolveEmoji(emoji: EmojiValue | string): string;
+}
+/**
+ * Factory function to create a WhatsApp adapter.
+ *
+ * @example
+ * ```typescript
+ * const adapter = createWhatsAppAdapter({
+ *   accessToken: process.env.WHATSAPP_ACCESS_TOKEN!,
+ *   appSecret: process.env.WHATSAPP_APP_SECRET!,
+ *   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
+ *   verifyToken: process.env.WHATSAPP_VERIFY_TOKEN!,
+ * });
+ * ```
+ */
+declare function createWhatsAppAdapter(config?: WhatsAppAdapterConfig): WhatsAppAdapter;
+
+export { WhatsAppAdapter, type WhatsAppAdapterConfig, type WhatsAppMediaResponse, type WhatsAppRawMessage, type WhatsAppThreadId, createWhatsAppAdapter, splitMessage };

@@ -1,0 +1,34 @@
+import type { ComponentProps } from 'svelte';
+import type Chart from '../components/Chart/Chart.svelte';
+import type { ChartProps } from '../components/Chart/Chart.svelte';
+export type Accessor<TData = any> = number | string | ((d: TData) => any) | undefined | null | Accessor<TData>[];
+export declare function accessor<TData = any>(prop: Accessor<TData>): (d: TData) => any;
+/** Guarantee chart data is an array */
+export declare function chartDataArray<TData = any>(data: ComponentProps<Chart<TData>>['data']): any[];
+export declare function defaultChartPadding<TData>(options?: {
+    axis?: ChartProps<TData>['axis'];
+    legend?: ChartProps<TData>['legend'];
+    top?: number;
+    left?: number;
+    bottom?: number;
+    right?: number;
+} | undefined): {
+    top: number;
+    left: number;
+    bottom: number;
+    right: number;
+} | undefined;
+/**
+ * Find the first instance within `data` with the same value as `original` using prop accessor.
+ * Handles complex objects such as `Date` by invoking `.valueOf()`
+ */
+export declare function findRelatedData(data: any[], original: any, accessor: Function): any;
+/**
+ * Return the object if the value is an object, otherwise return null.
+ * Functions (including Snippet types) are treated as non-objects and return null.
+ */
+export declare function getObjectOrNull<T>(value: T): T extends object ? T extends Function ? null : T : T extends null ? null : T extends undefined ? undefined : null;
+/**
+ * Call with args if function, otherwise return the value.
+ */
+export declare function resolveMaybeFn<T>(value: T | ((...args: any[]) => T), ...args: any[]): any;

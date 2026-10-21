@@ -1,0 +1,12 @@
+import { type TSchema, type TSchemaOptions } from '../../types/schema.mjs';
+import { type TProperties } from '../../types/properties.mjs';
+import { type TConstructor } from '../../types/constructor.mjs';
+import { type TNever } from '../../types/never.mjs';
+import { type TInstanceTypeDeferred } from '../../action/instance-type.mjs';
+import { type TState, type TInstantiateType, type TCanInstantiate } from '../instantiate.mjs';
+type TInstanceTypeAction<Type extends TSchema> = (Type extends TConstructor<infer _Parameters extends TSchema[], infer InstanceType extends TSchema> ? InstanceType : TNever);
+export type TInstanceTypeImmediate<Context extends TProperties, State extends TState, Type extends TSchema, InstantiatedType extends TSchema = TInstantiateType<Context, State, Type>> = TInstanceTypeAction<InstantiatedType>;
+export declare function InstanceTypeImmediate<Context extends TProperties, State extends TState, Type extends TSchema>(context: Context, state: State, type: Type, options: TSchemaOptions): TInstanceTypeImmediate<Context, State, Type>;
+export type TInstanceTypeInstantiate<Context extends TProperties, State extends TState, Type extends TSchema> = TCanInstantiate<Context, [Type]> extends true ? TInstanceTypeImmediate<Context, State, Type> : TInstanceTypeDeferred<Type>;
+export declare function InstanceTypeInstantiate<Context extends TProperties, State extends TState, Type extends TSchema>(context: Context, state: State, type: Type, options?: TSchemaOptions): TInstanceTypeInstantiate<Context, State, Type>;
+export {};

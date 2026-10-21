@@ -1,0 +1,16 @@
+import { type TSchema, type TSchemaOptions } from '../../types/schema.mjs';
+import { type TProperties } from '../../types/properties.mjs';
+import { type TEnum, type TEnumValue } from '../../types/enum.mjs';
+import { type TUnion } from '../../types/union.mjs';
+import { type TExtends, ExtendsResult } from '../../extends/index.mjs';
+import { type TEnumValuesToVariants } from '../enum/index.mjs';
+import { type TEvaluateUnion, type TFlatten } from '../evaluate/index.mjs';
+import { type TState, type TInstantiateType, type TCanInstantiate } from '../instantiate.mjs';
+import { type TExcludeDeferred } from '../../action/exclude.mjs';
+type TExcludeUnion<Types extends TSchema[], Right extends TSchema, Result extends TSchema[] = []> = (Types extends [infer Head extends TSchema, ...infer Tail extends TSchema[]] ? TExcludeUnion<Tail, Right, [...Result, ...TExcludeType<Head, Right>]> : Result);
+type TExcludeType<Left extends TSchema, Right extends TSchema, Check extends ExtendsResult.TResult = TExtends<{}, Left, Right>, Result extends TSchema[] = Check extends ExtendsResult.TExtendsTrueLike<infer _> ? [] : [Left]> = Result;
+type TExcludeAction<Left extends TSchema, Right extends TSchema, Remaining extends TSchema[] = (Left extends TEnum<infer Values extends TEnumValue[]> ? TExcludeUnion<TEnumValuesToVariants<Values>, Right> : Left extends TUnion<infer Types extends TSchema[]> ? TExcludeUnion<TFlatten<Types>, Right> : TExcludeType<Left, Right>), Result extends TSchema = TEvaluateUnion<Remaining>> = Result;
+type TExcludeImmediate<Context extends TProperties, State extends TState, Left extends TSchema, Right extends TSchema, InstantiatedLeft extends TSchema = TInstantiateType<Context, State, Left>, InstantiatedRight extends TSchema = TInstantiateType<Context, State, Right>> = TExcludeAction<InstantiatedLeft, InstantiatedRight>;
+export type TExcludeInstantiate<Context extends TProperties, State extends TState, Left extends TSchema, Right extends TSchema> = TCanInstantiate<Context, [Left, Right]> extends true ? TExcludeImmediate<Context, State, Left, Right> : TExcludeDeferred<Left, Right>;
+export declare function ExcludeInstantiate<Context extends TProperties, State extends TState, Left extends TSchema, Right extends TSchema>(context: Context, state: State, left: Left, right: Right, options: TSchemaOptions): TExcludeInstantiate<Context, State, Left, Right>;
+export {};

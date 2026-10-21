@@ -1,0 +1,2 @@
+import { TResult } from './try-result.mjs';
+export declare function TryUndefined(value: unknown): TResult<undefined>;

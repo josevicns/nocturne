@@ -1,0 +1,75 @@
+/// <reference types="svelte" />
+import { type Writable } from 'svelte/store';
+export type EncodeAndDecodeOptions<T = any> = {
+    encode: (value: T) => string | undefined;
+    decode: (value: string | null) => T | null;
+    defaultValue?: T;
+};
+export type StoreOptions<T> = {
+    debounceHistory?: number;
+    pushHistory?: boolean;
+    sort?: boolean;
+    showDefaults?: boolean;
+    equalityFn?: T extends object ? (current: T | null, next: T | null) => boolean : never;
+};
+type LooseAutocomplete<T> = {
+    [K in keyof T]: T[K];
+} & {
+    [K: string]: any;
+};
+type Options<T> = {
+    [Key in keyof T]: (T[Key] extends boolean ? string : T[Key] extends EncodeAndDecodeOptions<infer TReturn> ? TReturn : string) | (T[Key] extends EncodeAndDecodeOptions<any> ? undefined extends T[Key]['defaultValue'] ? null : never : null);
+};
+declare function objectEncodeAndDecodeOptions<T extends object = any>(defaultValue: T): EncodeAndDecodeOptions<T> & {
+    defaultValue: T;
+};
+declare function objectEncodeAndDecodeOptions<T extends object = any>(): EncodeAndDecodeOptions<T> & {
+    defaultValue: undefined;
+};
+declare function arrayEncodeAndDecodeOptions<T = any>(defaultValue: T[]): EncodeAndDecodeOptions<T[]> & {
+    defaultValue: T[];
+};
+declare function arrayEncodeAndDecodeOptions<T = any>(): EncodeAndDecodeOptions<T[]> & {
+    defaultValue: undefined;
+};
+declare function lzEncodeAndDecodeOptions<T = any>(defaultValue: T): EncodeAndDecodeOptions<T> & {
+    defaultValue: T;
+};
+declare function lzEncodeAndDecodeOptions<T = any>(): EncodeAndDecodeOptions<T> & {
+    defaultValue: undefined;
+};
+export declare const ssp: {
+    number: {
+        (defaultValue: number): EncodeAndDecodeOptions<number> & {
+            defaultValue: number;
+        };
+        (): EncodeAndDecodeOptions<number> & {
+            defaultValue: undefined;
+        };
+    };
+    boolean: {
+        (defaultValue: boolean): EncodeAndDecodeOptions<boolean> & {
+            defaultValue: boolean;
+        };
+        (): EncodeAndDecodeOptions<boolean> & {
+            defaultValue: undefined;
+        };
+    };
+    string: {
+        (defaultValue: string): EncodeAndDecodeOptions<string> & {
+            defaultValue: string;
+        };
+        (): EncodeAndDecodeOptions<string> & {
+            defaultValue: undefined;
+        };
+    };
+    object: typeof objectEncodeAndDecodeOptions;
+    array: typeof arrayEncodeAndDecodeOptions;
+    lz: typeof lzEncodeAndDecodeOptions;
+};
+export declare function queryParameters<T extends Record<string, EncodeAndDecodeOptions | boolean>>(options?: T, { debounceHistory, pushHistory, sort, showDefaults, equalityFn, }?: StoreOptions<Options<T>>): Writable<LooseAutocomplete<Options<T>>>;
+export declare function queryParam<T>(name: string, options: EncodeAndDecodeOptions<T> & {
+    defaultValue: T;
+}, storeOptions?: StoreOptions<T>): Writable<T>;
+export declare function queryParam<T = string>(name: string, options?: EncodeAndDecodeOptions<T>, storeOptions?: StoreOptions<T>): Writable<T | null>;
+export {};

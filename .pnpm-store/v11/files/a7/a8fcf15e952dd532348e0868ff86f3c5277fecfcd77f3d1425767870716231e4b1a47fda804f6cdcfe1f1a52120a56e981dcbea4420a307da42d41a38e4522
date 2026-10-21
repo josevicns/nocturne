@@ -1,0 +1,70 @@
+import type { SVGAttributes } from 'svelte/elements';
+import type { Without } from '../../utils/types.js';
+import type { DataProp, DataDrivenStyleProps } from '../../utils/dataProp.js';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+import type { GeoState } from '../../states/geo.svelte.js';
+export type EllipsePropsWithoutHTML = {
+    /** The center x position of the ellipse. @default 0 */
+    cx?: DataProp;
+    /** The initial center x position of the ellipse (pixel mode only). @default cx */
+    initialCx?: number;
+    /** The center y position of the ellipse. @default 0 */
+    cy?: DataProp;
+    /** The initial center y position of the ellipse (pixel mode only). @default cy */
+    initialCy?: number;
+    /** The radius of the ellipse on the x-axis. @default 1 */
+    rx?: DataProp;
+    /** The initial radius of the ellipse on the x-axis (pixel mode only). @default rx */
+    initialRx?: number;
+    /** The radius of the ellipse on the y-axis. @default 1 */
+    ry?: DataProp;
+    /** The initial radius of the ellipse on the y-axis (pixel mode only). @default ry */
+    initialRy?: number;
+    /** Data array to iterate over in data mode. */
+    data?: any[];
+    /** Key function for keyed {#each} rendering in data mode. @default (d, i) => i */
+    key?: (d: any, index: number) => any;
+    /** A bindable reference to the `<ellipse>` element (pixel mode only). @bindable */
+    ref?: SVGEllipseElement;
+    /** Motion configuration (pixel mode only). */
+    motion?: MotionProp;
+} & DataDrivenStyleProps;
+export type EllipseProps = EllipsePropsWithoutHTML & Without<SVGAttributes<Element>, EllipsePropsWithoutHTML>;
+export declare function ellipseMarkInfo(props: EllipseProps, dataMode: boolean): {
+    data?: undefined;
+    x?: undefined;
+    y?: undefined;
+    color?: undefined;
+} | {
+    data: any[] | undefined;
+    x: string | undefined;
+    y: string | undefined;
+    color: string | undefined;
+};
+export declare class EllipseState {
+    #private;
+    chartCtx: ChartState;
+    geo: GeoState;
+    dataMode: boolean;
+    resolvedItems: {
+        d: any;
+        key: any;
+        cx: number;
+        cy: number;
+        rx: number;
+        ry: number;
+    }[];
+    get motionCx(): any;
+    get motionCy(): any;
+    get motionRx(): any;
+    get motionRy(): any;
+    staticFill: string | undefined;
+    staticFillOpacity: number | undefined;
+    staticStroke: string | undefined;
+    staticStrokeWidth: number | undefined;
+    staticOpacity: number | undefined;
+    staticClassName: string | undefined;
+    staticBorderWidth: string | undefined;
+    constructor(getProps: () => EllipseProps);
+}

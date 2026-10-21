@@ -1,0 +1,155 @@
+import { untrack } from 'svelte';
+import { hasAnyDataProp, resolveDataProp, resolveGeoDataPair } from '../../utils/dataProp.js';
+import { chartDataArray } from '../../utils/common.js';
+import { parseDashArray } from '../../utils/path.js';
+import { createMotion, createDataMotionMap } from '../../utils/motion.svelte.js';
+import { getChartContext } from '../../contexts/chart.js';
+import { getGeoContext } from '../../contexts/geo.js';
+const defaultKey = (_, i) => i;
+/**
+ * Resolve the cx/cy/r values for a single data item, going through
+ * either the geo projection or the chart's x/y/r scales.
+ */
+export function resolveCircle(d, props, chartCtx, geo) {
+    // When cx/cy/r are omitted, fall back to the chart's accessors
+    // (xGet/yGet/rGet) — same pattern as `Points`. Hardcoded defaults
+    // (0/0/1) only apply when neither prop nor chart-level config is set.
+    const cxDefault = typeof props.cx === 'number'
+        ? props.cx
+        : props.cx == null && chartCtx.config.x != null
+            ? Number(chartCtx.xGet(d)) || 0
+            : 0;
+    const cyDefault = typeof props.cy === 'number'
+        ? props.cy
+        : props.cy == null && chartCtx.config.y != null
+            ? Number(chartCtx.yGet(d)) || 0
+            : 0;
+    const rDefault = typeof props.r === 'number'
+        ? props.r
+        : props.r == null && chartCtx.config.r != null
+            ? Number(chartCtx.rGet(d)) || 1
+            : 1;
+    if (geo.projection) {
+        const [projX, projY] = resolveGeoDataPair(props.cx, props.cy, d, geo.projection);
+        return {
+            cx: projX,
+            cy: projY,
+            r: resolveDataProp(props.r, d, chartCtx.rScale, rDefault),
+        };
+    }
+    return {
+        cx: resolveDataProp(props.cx, d, chartCtx.xScale, cxDefault),
+        cy: resolveDataProp(props.cy, d, chartCtx.yScale, cyDefault),
+        r: resolveDataProp(props.r, d, chartCtx.rScale, rDefault),
+    };
+}
+/**
+ * Reactive state shared by every per-layer Circle variant. Instantiate from
+ * each `Circle.svg.svelte` / `Circle.canvas.svelte` / `Circle.html.svelte`
+ * component setup, passing a getter for the props. Exposes the derived
+ * computations + motion sources every layer needs.
+ *
+ * Per-layer specific bits (e.g. SVG's `bind:this` ref, HTML's
+ * `staticBorderWidth`, canvas's `render` function and canvas registration)
+ * stay in their respective `.svelte` files.
+ */
+export class CircleState {
+    // Default initializer so derived class fields below can safely call this
+    // before the constructor body sets the real getter.
+    #getProps = () => ({});
+    // Contexts (must be read inside a Svelte component setup, which is where
+    // CircleState is instantiated).
+    chartCtx = getChartContext();
+    geo = getGeoContext();
+    // Reactive derivations
+    dashArrayResolved = $derived(parseDashArray(this.#getProps().dashArray));
+    dashArrayAttr = $derived(this.dashArrayResolved ? this.dashArrayResolved.join(' ') : undefined);
+    dataMode = $derived(this.#getProps().data != null ||
+        hasAnyDataProp(this.#getProps().cx, this.#getProps().cy, this.#getProps().r));
+    #resolvedData = $derived(this.dataMode ? (this.#getProps().data ?? chartDataArray(this.chartCtx.data)) : []);
+    // Per-key motion tracking (only created when motion is configured)
+    #dataMotionMap = null;
+    resolvedItems = $derived.by(() => {
+        if (!this.dataMode)
+            return [];
+        const props = this.#getProps();
+        const keyFn = props.key ?? defaultKey;
+        return this.#resolvedData.map((d, i) => {
+            const key = keyFn(d, i);
+            const resolved = resolveCircle(d, props, this.chartCtx, this.geo);
+            const animated = this.#dataMotionMap?.get(key);
+            return {
+                d,
+                key,
+                cx: animated?.cx ?? resolved.cx,
+                cy: animated?.cy ?? resolved.cy,
+                r: animated?.r ?? resolved.r,
+            };
+        });
+    });
+    // Pixel-mode motion sources. Initial values are captured at construction;
+    // subsequent updates come from the prop getters.
+    #motionCx;
+    #motionCy;
+    #motionR;
+    // Static (non-data-driven) values used by SVG/HTML branches in pixel mode.
+    staticFill = $derived(typeof this.#getProps().fill === 'string' ? this.#getProps().fill : undefined);
+    staticFillOpacity = $derived(typeof this.#getProps().fillOpacity === 'number'
+        ? this.#getProps().fillOpacity
+        : undefined);
+    staticStroke = $derived(typeof this.#getProps().stroke === 'string' ? this.#getProps().stroke : undefined);
+    staticStrokeWidth = $derived(typeof this.#getProps().strokeWidth === 'number'
+        ? this.#getProps().strokeWidth
+        : undefined);
+    staticOpacity = $derived(typeof this.#getProps().opacity === 'number' ? this.#getProps().opacity : undefined);
+    staticClassName = $derived(typeof this.#getProps().class === 'string' ? this.#getProps().class : undefined);
+    constructor(getProps) {
+        this.#getProps = getProps;
+        const initial = getProps();
+        const initialCx = initial.initialCx ?? (typeof initial.cx === 'number' ? initial.cx : 0);
+        const initialCy = initial.initialCy ?? (typeof initial.cy === 'number' ? initial.cy : 0);
+        const initialR = initial.initialR ?? (typeof initial.r === 'number' ? initial.r : 1);
+        this.#motionCx = createMotion(initialCx, () => (typeof getProps().cx === 'number' ? getProps().cx : 0), initial.motion);
+        this.#motionCy = createMotion(initialCy, () => (typeof getProps().cy === 'number' ? getProps().cy : 0), initial.motion);
+        this.#motionR = createMotion(initialR, () => (typeof getProps().r === 'number' ? getProps().r : 1), initial.motion);
+        this.#dataMotionMap = createDataMotionMap(initial.motion);
+        if (this.#dataMotionMap) {
+            const motionMap = this.#dataMotionMap;
+            $effect(() => {
+                if (!this.dataMode)
+                    return;
+                const props = getProps();
+                const keyFn = props.key ?? defaultKey;
+                const activeKeys = new Set();
+                for (let i = 0; i < this.#resolvedData.length; i++) {
+                    const d = this.#resolvedData[i];
+                    const key = keyFn(d, i);
+                    activeKeys.add(key);
+                    const resolved = resolveCircle(d, props, this.chartCtx, this.geo);
+                    untrack(() => motionMap.update(key, resolved));
+                }
+                untrack(() => motionMap.cleanup(activeKeys));
+            });
+        }
+    }
+    get motionCx() {
+        return this.#motionCx.current;
+    }
+    get motionCy() {
+        return this.#motionCy.current;
+    }
+    get motionR() {
+        return this.#motionR.current;
+    }
+}
+/** Build the standard `markInfo` payload used by every Circle variant. */
+export function circleMarkInfo(props, dataMode) {
+    if (!dataMode)
+        return {};
+    return {
+        data: props.data,
+        x: typeof props.cx === 'string' ? props.cx : undefined,
+        y: typeof props.cy === 'string' ? props.cy : undefined,
+        color: typeof props.fill === 'string' ? props.fill : undefined,
+    };
+}

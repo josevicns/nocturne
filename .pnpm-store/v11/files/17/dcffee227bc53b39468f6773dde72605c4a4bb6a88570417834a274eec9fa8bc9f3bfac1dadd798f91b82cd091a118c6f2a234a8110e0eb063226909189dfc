@@ -1,0 +1,5 @@
+import type { GeneratorConfig } from '../config.js';
+import type { ParsedSpec } from '../types.js';
+/** The modules shared by the tag files, emitted only when something needs them. */
+export declare const SHARED_MODULE_FILES: readonly string[];
+export declare function generateRemoteFunctions(parsed: ParsedSpec, config: GeneratorConfig): Map<string, string>;

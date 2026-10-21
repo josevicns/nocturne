@@ -1,0 +1,133 @@
+import { untrack } from 'svelte';
+import { hasAnyDataProp, resolveDataProp, resolveGeoDataPair } from '../../utils/dataProp.js';
+import { chartDataArray } from '../../utils/common.js';
+import { createMotion, createDataMotionMap } from '../../utils/motion.svelte.js';
+import { getChartContext } from '../../contexts/chart.js';
+import { getGeoContext } from '../../contexts/geo.js';
+const defaultKey = (_, i) => i;
+export function ellipseMarkInfo(props, dataMode) {
+    if (!dataMode)
+        return {};
+    return {
+        data: props.data,
+        x: typeof props.cx === 'string' ? props.cx : undefined,
+        y: typeof props.cy === 'string' ? props.cy : undefined,
+        color: typeof props.fill === 'string'
+            ? props.fill
+            : typeof props.stroke === 'string'
+                ? props.stroke
+                : undefined,
+    };
+}
+export class EllipseState {
+    #getProps = () => ({});
+    /**
+     * Memoized props — the component's props closure allocates a fresh object
+     * (it spreads `rest`), so calling it once per derived meant one allocation
+     * per derived per update. Read it once here instead.
+     */
+    #props = $derived(this.#getProps());
+    chartCtx = getChartContext();
+    geo = getGeoContext();
+    dataMode = $derived(hasAnyDataProp(this.#props.cx, this.#props.cy, this.#props.rx, this.#props.ry));
+    #resolvedData = $derived(this.dataMode ? (this.#props.data ?? chartDataArray(this.chartCtx.data)) : []);
+    resolvedItems = $derived.by(() => {
+        if (!this.dataMode)
+            return [];
+        const props = this.#props;
+        const keyFn = props.key ?? defaultKey;
+        return this.#resolvedData.map((d, i) => {
+            const key = keyFn(d, i);
+            const resolved = this.#resolveEllipse(d);
+            const animated = this.#dataMotionMap?.get(key);
+            return {
+                d,
+                key,
+                cx: animated?.cx ?? resolved.cx,
+                cy: animated?.cy ?? resolved.cy,
+                rx: animated?.rx ?? resolved.rx,
+                ry: animated?.ry ?? resolved.ry,
+            };
+        });
+    });
+    #resolveEllipse(d) {
+        const props = this.#props;
+        if (this.geo.projection) {
+            const [projX, projY] = resolveGeoDataPair(props.cx, props.cy, d, this.geo.projection);
+            return {
+                cx: projX,
+                cy: projY,
+                rx: resolveDataProp(props.rx, d, this.chartCtx.rScale, typeof props.rx === 'number' ? props.rx : 1),
+                ry: resolveDataProp(props.ry, d, this.chartCtx.rScale, typeof props.ry === 'number' ? props.ry : 1),
+            };
+        }
+        return {
+            cx: resolveDataProp(props.cx, d, this.chartCtx.xScale, 0),
+            cy: resolveDataProp(props.cy, d, this.chartCtx.yScale, 0),
+            rx: resolveDataProp(props.rx, d, this.chartCtx.rScale, typeof props.rx === 'number' ? props.rx : 1),
+            ry: resolveDataProp(props.ry, d, this.chartCtx.rScale, typeof props.ry === 'number' ? props.ry : 1),
+        };
+    }
+    #dataMotionMap = null;
+    #motionCx;
+    #motionCy;
+    #motionRx;
+    #motionRy;
+    get motionCx() {
+        return this.#motionCx.current;
+    }
+    get motionCy() {
+        return this.#motionCy.current;
+    }
+    get motionRx() {
+        return this.#motionRx.current;
+    }
+    get motionRy() {
+        return this.#motionRy.current;
+    }
+    staticFill = $derived(typeof this.#props.fill === 'string' ? this.#props.fill : undefined);
+    staticFillOpacity = $derived(typeof this.#props.fillOpacity === 'number' ? this.#props.fillOpacity : undefined);
+    staticStroke = $derived(typeof this.#props.stroke === 'string' ? this.#props.stroke : undefined);
+    staticStrokeWidth = $derived(typeof this.#props.strokeWidth === 'number' ? this.#props.strokeWidth : undefined);
+    staticOpacity = $derived(typeof this.#props.opacity === 'number' ? this.#props.opacity : undefined);
+    staticClassName = $derived(typeof this.#props.class === 'string' ? this.#props.class : undefined);
+    staticBorderWidth = $derived.by(() => {
+        const props = this.#props;
+        if (typeof props.strokeWidth === 'number')
+            return `${props.strokeWidth}px`;
+        if (typeof props.stroke === 'string')
+            return '1px';
+        return undefined;
+    });
+    constructor(getProps) {
+        this.#getProps = getProps;
+        const initial = getProps();
+        const initialCx = initial.initialCx ?? (typeof initial.cx === 'number' ? initial.cx : 0);
+        const initialCy = initial.initialCy ?? (typeof initial.cy === 'number' ? initial.cy : 0);
+        const initialRx = initial.initialRx ?? (typeof initial.rx === 'number' ? initial.rx : 1);
+        const initialRy = initial.initialRy ?? (typeof initial.ry === 'number' ? initial.ry : 1);
+        this.#motionCx = createMotion(initialCx, () => (typeof this.#props.cx === 'number' ? this.#props.cx : 0), initial.motion);
+        this.#motionCy = createMotion(initialCy, () => (typeof this.#props.cy === 'number' ? this.#props.cy : 0), initial.motion);
+        this.#motionRx = createMotion(initialRx, () => (typeof this.#props.rx === 'number' ? this.#props.rx : 1), initial.motion);
+        this.#motionRy = createMotion(initialRy, () => (typeof this.#props.ry === 'number' ? this.#props.ry : 1), initial.motion);
+        this.#dataMotionMap = createDataMotionMap(initial.motion);
+        if (this.#dataMotionMap) {
+            const motionMap = this.#dataMotionMap;
+            $effect(() => {
+                if (!this.dataMode)
+                    return;
+                const props = this.#props;
+                const keyFn = props.key ?? defaultKey;
+                const activeKeys = new Set();
+                for (let i = 0; i < this.#resolvedData.length; i++) {
+                    const d = this.#resolvedData[i];
+                    const key = keyFn(d, i);
+                    activeKeys.add(key);
+                    const resolved = this.#resolveEllipse(d);
+                    untrack(() => motionMap.update(key, resolved));
+                }
+                untrack(() => motionMap.cleanup(activeKeys));
+            });
+        }
+    }
+}

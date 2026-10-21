@@ -1,0 +1,751 @@
+/// <reference path="./eslint-augmentation.d.cts" />
+//#region src/sites/readers/types.d.ts
+
+type Visitors = Record<string, (node: any) => void>;
+//#endregion
+//#region src/plugin.d.ts
+
+declare const plugin: {
+  meta: {
+    name: string;
+  };
+  rules: {
+    "no-restyle": {
+      meta: {
+        type: "problem";
+        docs: {
+          description: string;
+          url: string;
+        };
+        schema: {
+          type: string;
+          properties: {
+            contracts: {
+              type: string;
+              items: {
+                type: string;
+                properties: {
+                  pattern: {
+                    type: string;
+                  };
+                  allow: {
+                    type: string;
+                    items: {
+                      type: string;
+                    };
+                  };
+                  deny: {
+                    type: string;
+                    items: {
+                      type: string;
+                    };
+                  };
+                  message: {
+                    anyOf: ({
+                      type: string;
+                      maxLength: number;
+                      properties?: undefined;
+                      additionalProperties?: undefined;
+                    } | {
+                      type: string;
+                      properties: {
+                        [k: string]: {
+                          type: string;
+                          maxLength: number;
+                        };
+                      };
+                      additionalProperties: boolean;
+                      maxLength?: undefined;
+                    })[];
+                  };
+                };
+                required: string[];
+                additionalProperties: boolean;
+              };
+            };
+            componentImports: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            ignoreImports: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            mergeFunctions: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            variantFunctions: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            allow: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            deny: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            message: {
+              anyOf: ({
+                type: string;
+                maxLength: number;
+                properties?: undefined;
+                additionalProperties?: undefined;
+              } | {
+                type: string;
+                properties: {
+                  [k: string]: {
+                    type: string;
+                    maxLength: number;
+                  };
+                };
+                additionalProperties: boolean;
+                maxLength?: undefined;
+              })[];
+            };
+          };
+          additionalProperties: boolean;
+        }[];
+        messages: {
+          appearanceClass: string;
+          appearanceClassWithVariants: string;
+          appearanceClassNoVariants: string;
+          appearanceClassViaWrapper: string;
+          deniedClass: string;
+          layoutClass: string;
+          layoutClassClosed: string;
+          unclassifiedClass: string;
+          declaredClass: string;
+          spacingClassWithSizes: string;
+          spacingClassNoSizes: string;
+          spacingClassViaWrapperWithSizes: string;
+          spacingClassViaWrapperNoSizes: string;
+        };
+      };
+      create(context: any): {
+        Program(node: any): void;
+      } | Visitors;
+    } & {
+      create(context: any): any;
+    };
+    "no-raw-colors": {
+      meta: {
+        type: "problem";
+        hasSuggestions: boolean;
+        docs: {
+          description: string;
+          url: string;
+        };
+        schema: {
+          type: string;
+          properties: {
+            scanAllStrings: {
+              type: string;
+            };
+            componentImports: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            ignoreImports: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            mergeFunctions: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            variantFunctions: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            allow: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            deny: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            contracts: {
+              type: string;
+              items: {
+                type: string;
+                properties: {
+                  pattern: {
+                    type: string;
+                  };
+                  allow: {
+                    type: string;
+                    items: {
+                      type: string;
+                    };
+                  };
+                  deny: {
+                    type: string;
+                    items: {
+                      type: string;
+                    };
+                  };
+                  message: {
+                    type: string;
+                    maxLength: number;
+                  };
+                };
+                required: string[];
+                additionalProperties: boolean;
+              };
+            };
+            message: {
+              type: string;
+              maxLength: number;
+            };
+          };
+          additionalProperties: boolean;
+        }[];
+        messages: {
+          paletteClass: string;
+          paletteClassNear: string;
+          paletteClassFar: string;
+          paletteClassListed: string;
+          undeclaredToken: string;
+          undeclaredTokenTypo: string;
+          rawColorAttribute: string;
+          rawColorAttributeNear: string;
+          useToken: string;
+        };
+      };
+      create(context: any): {
+        Program(node: any): void;
+      } | Visitors;
+    } & {
+      create(context: any): any;
+    };
+    "no-arbitrary-values": {
+      meta: {
+        type: "problem";
+        hasSuggestions: boolean;
+        docs: {
+          description: string;
+          url: string;
+        };
+        schema: {
+          type: string;
+          properties: {
+            componentImports: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            ignoreImports: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            mergeFunctions: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            variantFunctions: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            scanAllStrings: {
+              type: string;
+            };
+            allow: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            deny: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            contracts: {
+              type: string;
+              items: {
+                type: string;
+                properties: {
+                  pattern: {
+                    type: string;
+                  };
+                  allow: {
+                    type: string;
+                    items: {
+                      type: string;
+                    };
+                  };
+                  deny: {
+                    type: string;
+                    items: {
+                      type: string;
+                    };
+                  };
+                  message: {
+                    type: string;
+                    maxLength: number;
+                  };
+                };
+                required: string[];
+                additionalProperties: boolean;
+              };
+            };
+            message: {
+              type: string;
+              maxLength: number;
+            };
+          };
+          additionalProperties: boolean;
+        }[];
+        messages: {
+          arbitraryValue: string;
+          arbitraryValueWithScale: string;
+          arbitraryValueNearScale: string;
+          arbitraryColorNear: string;
+          arbitraryColorFar: string;
+          useScale: string;
+          useToken: string;
+        };
+      };
+      create(context: any): {
+        Program(node: any): void;
+      } | Visitors;
+    } & {
+      create(context: any): any;
+    };
+    "no-inline-styles": {
+      meta: {
+        type: "problem";
+        docs: {
+          description: string;
+          url: string;
+        };
+        schema: {
+          type: string;
+          properties: {
+            allow: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            deny: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            contracts: {
+              type: string;
+              items: {
+                type: string;
+                properties: {
+                  pattern: {
+                    type: string;
+                  };
+                  allow: {
+                    type: string;
+                    items: {
+                      type: string;
+                    };
+                  };
+                  deny: {
+                    type: string;
+                    items: {
+                      type: string;
+                    };
+                  };
+                  message: {
+                    type: string;
+                    maxLength: number;
+                  };
+                };
+                required: string[];
+                additionalProperties: boolean;
+              };
+            };
+            message: {
+              type: string;
+              maxLength: number;
+            };
+          };
+          additionalProperties: boolean;
+        }[];
+        messages: {
+          inlineStyle: string;
+          dynamicStyle: string;
+          customPropColor: string;
+          styleElement: string;
+        };
+      };
+      create(context: any): {
+        Program(node: any): void;
+      } | Visitors;
+    } & {
+      create(context: any): any;
+    };
+    "require-static-classes": {
+      meta: {
+        type: "problem";
+        docs: {
+          description: string;
+          url: string;
+        };
+        schema: {
+          type: string;
+          properties: {
+            componentImports: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            ignoreImports: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            mergeFunctions: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            variantFunctions: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            message: {
+              type: string;
+              maxLength: number;
+            };
+          };
+          additionalProperties: boolean;
+        }[];
+        messages: {
+          dynamicClasses: string;
+        };
+      };
+      create(context: any): Visitors;
+    } & {
+      create(context: any): any;
+    };
+    "no-unknown-classes": {
+      meta: {
+        type: "problem";
+        hasSuggestions: boolean;
+        docs: {
+          description: string;
+          url: string;
+        };
+        schema: {
+          type: string;
+          properties: {
+            componentImports: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            ignoreImports: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            mergeFunctions: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            variantFunctions: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            allow: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            deny: {
+              type: string;
+              items: {
+                type: string;
+              };
+            };
+            contracts: {
+              type: string;
+              items: {
+                type: string;
+                properties: {
+                  pattern: {
+                    type: string;
+                  };
+                  allow: {
+                    type: string;
+                    items: {
+                      type: string;
+                    };
+                  };
+                  deny: {
+                    type: string;
+                    items: {
+                      type: string;
+                    };
+                  };
+                  message: {
+                    type: string;
+                    maxLength: number;
+                  };
+                };
+                required: string[];
+                additionalProperties: boolean;
+              };
+            };
+            message: {
+              type: string;
+              maxLength: number;
+            };
+          };
+          additionalProperties: boolean;
+        }[];
+        messages: {
+          unknownClass: string;
+          unknownClassSuggest: string;
+          unknownVariant: string;
+          useSuggestion: string;
+        };
+      };
+      create(context: any): {
+        Program(node: any): void;
+      } | Visitors;
+    } & {
+      create(context: any): any;
+    };
+  };
+};
+//#endregion
+//#region src/project/components.d.ts
+type ComponentIndex = {
+  dir: string | null;
+  files: Map<string, string>;
+  has: (name: string) => boolean;
+  owns: (file: string) => boolean;
+};
+declare function componentsFor(fromFile: string): ComponentIndex;
+//#endregion
+//#region src/project/components-json.d.ts
+type Project = {
+  dir: string;
+  file: string | null;
+  root: string;
+  aliases: Record<string, string>;
+  cssFile: string | null;
+};
+declare function projectFor(fromFile: string): Project | null;
+//#endregion
+//#region src/project/theme.d.ts
+declare function themeFileFor(fromFile: string): string | null;
+declare function colorTokensFor(fromFile: string): Set<string> | null;
+//#endregion
+//#region src/project/variants.d.ts
+type VariantDefinition = {
+  name: string | null;
+  axes: Record<string, string[]>;
+  source: "factory" | "props";
+};
+declare function variantDefinitionsOf(file: string): VariantDefinition[];
+declare function variantNamesFor(file: string, component: string): string[] | null;
+//#endregion
+//#region src/index.d.ts
+declare const project: {
+  projectFor: typeof projectFor;
+  themeFileFor: typeof themeFileFor;
+  colorTokensFor: typeof colorTokensFor;
+  componentsFor: typeof componentsFor;
+  variantDefinitionsOf: typeof variantDefinitionsOf;
+  variantNamesFor: typeof variantNamesFor;
+};
+sideEffect();
+
+//#endregion
+export { plugin as default, plugin, project };
+
+declare module "@eslint/core" {
+  interface RulesConfig {
+    "shadcn/no-restyle"?: import("@eslint/core").RuleConfig<
+      [
+        {
+          allow?: string[]
+          deny?: string[]
+          message?:
+            | string
+            | Partial<
+                Record<
+                  | "default"
+                  | "layout"
+                  | "color"
+                  | "typography"
+                  | "spacing"
+                  | "shape"
+                  | "effects"
+                  | "motion",
+                  string
+                >
+              >
+          componentImports?: string[]
+          ignoreImports?: string[]
+          mergeFunctions?: string[]
+          variantFunctions?: string[]
+          contracts?: {
+            pattern: string
+            allow?: string[]
+            deny?: string[]
+            message?:
+              | string
+              | Partial<
+                  Record<
+                    | "default"
+                    | "layout"
+                    | "color"
+                    | "typography"
+                    | "spacing"
+                    | "shape"
+                    | "effects"
+                    | "motion",
+                    string
+                  >
+                >
+          }[]
+        },
+      ]
+    >
+    "shadcn/no-raw-colors"?: import("@eslint/core").RuleConfig<
+      [
+        {
+          allow?: string[]
+          deny?: string[]
+          contracts?: {
+            pattern: string
+            allow?: string[]
+            deny?: string[]
+            message?: string
+          }[]
+          message?: string
+          scanAllStrings?: boolean
+          componentImports?: string[]
+          ignoreImports?: string[]
+          mergeFunctions?: string[]
+          variantFunctions?: string[]
+        },
+      ]
+    >
+    "shadcn/no-arbitrary-values"?: import("@eslint/core").RuleConfig<
+      [
+        {
+          allow?: string[]
+          deny?: string[]
+          contracts?: {
+            pattern: string
+            allow?: string[]
+            deny?: string[]
+            message?: string
+          }[]
+          message?: string
+          scanAllStrings?: boolean
+          componentImports?: string[]
+          ignoreImports?: string[]
+          mergeFunctions?: string[]
+          variantFunctions?: string[]
+        },
+      ]
+    >
+    "shadcn/no-inline-styles"?: import("@eslint/core").RuleConfig<
+      [
+        {
+          allow?: string[]
+          deny?: string[]
+          contracts?: {
+            pattern: string
+            allow?: string[]
+            deny?: string[]
+            message?: string
+          }[]
+          message?: string
+        },
+      ]
+    >
+    "shadcn/require-static-classes"?: import("@eslint/core").RuleConfig<
+      [
+        {
+          message?: string
+          componentImports?: string[]
+          ignoreImports?: string[]
+          mergeFunctions?: string[]
+          variantFunctions?: string[]
+        },
+      ]
+    >
+    "shadcn/no-unknown-classes"?: import("@eslint/core").RuleConfig<
+      [
+        {
+          allow?: string[]
+          deny?: string[]
+          contracts?: {
+            pattern: string
+            allow?: string[]
+            deny?: string[]
+            message?: string
+          }[]
+          message?: string
+          componentImports?: string[]
+          ignoreImports?: string[]
+          mergeFunctions?: string[]
+          variantFunctions?: string[]
+        },
+      ]
+    >
+  }
+}

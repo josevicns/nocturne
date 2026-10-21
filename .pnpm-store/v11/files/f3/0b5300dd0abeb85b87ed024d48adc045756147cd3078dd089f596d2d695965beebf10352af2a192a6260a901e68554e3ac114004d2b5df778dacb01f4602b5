@@ -1,0 +1,11 @@
+import { type TSchema, type TSchemaOptions } from '../../types/schema.mjs';
+import { type TProperties } from '../../types/properties.mjs';
+import { type TFunction } from '../../types/function.mjs';
+import { type TNever } from '../../types/never.mjs';
+import { type TReturnTypeDeferred } from '../../action/return-type.mjs';
+import { type TState, type TInstantiateType, type TCanInstantiate } from '../instantiate.mjs';
+type TReturnTypeAction<Type extends TSchema> = Type extends TFunction<TSchema[], infer ReturnType extends TSchema> ? ReturnType : TNever;
+type TReturnTypeImmediate<Context extends TProperties, State extends TState, Type extends TSchema, InstantiatedType extends TSchema = TInstantiateType<Context, State, Type>> = TReturnTypeAction<InstantiatedType>;
+export type TReturnTypeInstantiate<Context extends TProperties, State extends TState, Type extends TSchema> = TCanInstantiate<Context, [Type]> extends true ? TReturnTypeImmediate<Context, State, Type> : TReturnTypeDeferred<Type>;
+export declare function ReturnTypeInstantiate<Context extends TProperties, State extends TState, Type extends TSchema>(context: Context, state: State, type: Type, options: TSchemaOptions): TReturnTypeInstantiate<Context, State, Type>;
+export {};

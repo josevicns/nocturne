@@ -1,0 +1,53 @@
+import type { AdapterPostableMessage, StreamChunk, StreamOptions, WebhookOptions } from "chat";
+import { Message } from "chat";
+import type { Root } from "mdast";
+import type { ResendAdapterConfig, ResendRawMessage, ResendThreadId } from "./types.js";
+export interface ChatInstance {
+    processMessage(adapter: unknown, threadId: string, message: unknown, options?: WebhookOptions): void;
+}
+export declare class ResendAdapter {
+    readonly name = "resend";
+    readonly userName: string;
+    private readonly config;
+    private resend;
+    private chat;
+    private readonly threadResolver;
+    private readonly formatConverter;
+    private webhookHandler;
+    constructor(config: ResendAdapterConfig);
+    /** Lazily create the Resend client so both initialize() and direct usage work. */
+    private getResend;
+    initialize(chat: ChatInstance): Promise<void>;
+    encodeThreadId(id: ResendThreadId): string;
+    decodeThreadId(threadId: string): ResendThreadId;
+    channelIdFromThreadId(threadId: string): string;
+    handleWebhook(request: Request, options?: WebhookOptions): Promise<Response>;
+    postMessage(threadId: string, message: AdapterPostableMessage): Promise<{
+        id: string;
+        raw: ResendRawMessage;
+        threadId: string;
+    }>;
+    stream(threadId: string, textStream: AsyncIterable<string | StreamChunk>, _options?: StreamOptions): Promise<{
+        id: string;
+        raw: ResendRawMessage;
+        threadId: string;
+    }>;
+    editMessage(_threadId: string, _messageId: string, _message: unknown): never;
+    deleteMessage(_threadId: string, _messageId: string): never;
+    addReaction(_threadId: string, _messageId: string, _reaction: string): never;
+    removeReaction(_threadId: string, _messageId: string, _reaction: string): never;
+    startTyping(_threadId: string): never;
+    renderFormatted(content: Root): string;
+    openDM(email: string): Promise<string>;
+    fetchThread(threadId: string): Promise<{
+        id: string;
+        channelId: string;
+        metadata: Record<string, unknown>;
+    }>;
+    fetchMessages(_threadId: string): Promise<{
+        messages: Message<ResendRawMessage>[];
+        nextCursor?: string;
+    }>;
+    parseMessage(raw: ResendRawMessage): Message<ResendRawMessage>;
+}
+//# sourceMappingURL=adapter.d.ts.map

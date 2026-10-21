@@ -1,0 +1,16 @@
+import { type TSchema, type TSchemaOptions } from '../../types/schema.mjs';
+import { type TProperties } from '../../types/properties.mjs';
+import { type TEnum, type TEnumValue } from '../../types/enum.mjs';
+import { type TUnion } from '../../types/union.mjs';
+import { type TExtends, ExtendsResult } from '../../extends/index.mjs';
+import { type TEnumValuesToVariants } from '../enum/index.mjs';
+import { type TEvaluateUnion, type TFlatten } from '../evaluate/index.mjs';
+import { type TState, type TInstantiateType, type TCanInstantiate } from '../instantiate.mjs';
+import { type TExtractDeferred } from '../../action/extract.mjs';
+type TExtractUnion<Types extends TSchema[], Right extends TSchema, Result extends TSchema[] = []> = (Types extends [infer Head extends TSchema, ...infer Tail extends TSchema[]] ? TExtractUnion<Tail, Right, [...Result, ...TExtractType<Head, Right>]> : Result);
+type TExtractType<Left extends TSchema, Right extends TSchema, Check extends ExtendsResult.TResult = TExtends<{}, Left, Right>, Result extends TSchema[] = Check extends ExtendsResult.TExtendsTrueLike<infer _> ? [Left] : []> = Result;
+type TExtractAction<Left extends TSchema, Right extends TSchema, Remaining extends TSchema[] = (Left extends TEnum<infer Values extends TEnumValue[]> ? TExtractUnion<TEnumValuesToVariants<Values>, Right> : Left extends TUnion<infer Types extends TSchema[]> ? TExtractUnion<TFlatten<Types>, Right> : TExtractType<Left, Right>), Result extends TSchema = TEvaluateUnion<Remaining>> = Result;
+type TExtractImmediate<Context extends TProperties, State extends TState, Left extends TSchema, Right extends TSchema, InstantiatedLeft extends TSchema = TInstantiateType<Context, State, Left>, InstantiatedRight extends TSchema = TInstantiateType<Context, State, Right>> = TExtractAction<InstantiatedLeft, InstantiatedRight>;
+export type TExtractInstantiate<Context extends TProperties, State extends TState, Left extends TSchema, Right extends TSchema> = TCanInstantiate<Context, [Left, Right]> extends true ? TExtractImmediate<Context, State, Left, Right> : TExtractDeferred<Left, Right>;
+export declare function ExtractInstantiate<Context extends TProperties, State extends TState, Left extends TSchema, Right extends TSchema>(context: Context, state: State, left: Left, right: Right, options: TSchemaOptions): TExtractInstantiate<Context, State, Left, Right>;
+export {};

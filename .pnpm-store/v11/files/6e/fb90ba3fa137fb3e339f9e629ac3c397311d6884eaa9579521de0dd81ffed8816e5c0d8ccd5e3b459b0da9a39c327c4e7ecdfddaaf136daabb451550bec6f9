@@ -1,0 +1,31 @@
+import type { Message } from '../adapters.js';
+export default class {
+    visitEmptyStatement(): Message[];
+    visitArrayPattern(): Message[];
+    visitBreakStatement(): Message[];
+    visitCatchClause(): Message[];
+    visitClassBody(): Message[];
+    visitClassExpression(): Message[];
+    visitContinueStatement(): Message[];
+    visitDebuggerStatement(): Message[];
+    visitExportAllDeclaration(): Message[];
+    visitExportSpecifier(): Message[];
+    visitIdentifier(): Message[];
+    visitImportAttribute(): Message[];
+    visitImportDeclaration(): Message[];
+    visitImportDefaultSpecifier(): Message[];
+    visitImportExpression(): Message[];
+    visitImportNamespaceSpecifier(): Message[];
+    visitImportSpecifier(): Message[];
+    visitMetaProperty(): Message[];
+    visitMethodDefinition(): Message[];
+    visitPrivateIdentifier(): Message[];
+    visitPropertyDefinition(): Message[];
+    visitStaticBlock(): Message[];
+    visitSuper(): Message[];
+    visitTemplateElement(): Message[];
+    visitThisExpression(): Message[];
+    visitThrowStatement(): Message[];
+    visitUpdateExpression(): Message[];
+    visitWithStatement(): Message[];
+}

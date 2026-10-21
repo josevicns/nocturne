@@ -1,0 +1,110 @@
+import type { HTMLAttributes } from 'svelte/elements';
+import { type Without } from '../../utils/types.js';
+import type { TooltipState as TooltipStateType } from '../../states/tooltip.svelte.js';
+import type { Accessor } from '../../utils/common.js';
+export type TooltipMode = 'bisect-x' | 'bisect-y' | 'band' | 'bisect-band' | 'bounds' | 'voronoi' | 'quadtree' | 'quadtree-x' | 'quadtree-y' | 'manual';
+type TooltipContextPropsWithoutHTML<T = any> = {
+    /**
+     * The tooltip interaction mode
+     * @default 'manual'
+     */
+    mode?: TooltipMode;
+    /**
+     * Method to find tooltip data
+     * @default 'closest'
+     */
+    findTooltipData?: 'closest' | 'left' | 'right';
+    /**
+     * Similar to d3-selection's raise, re-insert the e.target as the last child of its parent, so
+     * to be the top-most element
+     * @default false
+     */
+    raiseTarget?: boolean;
+    /**
+     * Lock tooltip (keep open, do not update on mouse movement). Allows for clicking on tooltip
+     * @default false
+     */
+    locked?: boolean;
+    /**
+     * Controls the touch event behavior on the tooltip container.
+     * By default uses `pan-y` to allow verticle scrolling but horizontal scrubbing.
+     * Use `none` to disable all touch events (useful for improved transform/geo charts interactions)
+     * @default 'pan-y'
+     */
+    touchEvents?: 'none' | 'pan-x' | 'pan-y' | 'auto';
+    /**
+     * quadtree search or voronoi clip radius
+     * @default Infinity
+     */
+    radius?: number;
+    /**
+     * Override the `x` accessor used for quadtree/voronoi hit detection.
+     * Useful when the chart's `x` accessor returns an array of values and you
+     * want hit detection at a specific endpoint.
+     *
+     * Accepts a string property name (e.g. `'POP_2015'`) or a function.
+     */
+    x?: Accessor;
+    /**
+     * Override the `y` accessor used for quadtree/voronoi hit detection.
+     * See `x` above.
+     */
+    y?: Accessor;
+    /**
+     * Enable debug view (show hit targets, etc)
+     * @default false
+     */
+    debug?: boolean;
+    /**
+     * Click handler for the tooltip
+     * @default () => {}
+     */
+    onclick?: (e: MouseEvent, { data }: {
+        data: any;
+    }) => any;
+    /**
+     * Exposed to allow binding in Chart
+     * @default { x: 0, y: 0, data: null, show: showTooltip, hide: hideTooltip, mode }
+     */
+    state?: TooltipStateType<T>;
+    /**
+     * Delay in ms before hiding tooltip
+     * @default 0
+     */
+    hideDelay?: number;
+    /**
+     * A reference to the tooltip container element.
+     *
+     * @bindable
+     */
+    ref?: HTMLElement;
+    children?: Snippet<[{
+        state: TooltipStateType<T>;
+    }]>;
+};
+export type TooltipContextProps<T = any> = TooltipContextPropsWithoutHTML<T> & Without<HTMLAttributes<HTMLElement>, TooltipContextPropsWithoutHTML<T>>;
+import type { Snippet } from 'svelte';
+declare function $$render<TData = any>(): {
+    props: TooltipContextProps<TData>;
+    exports: {};
+    bindings: "state" | "ref";
+    slots: {};
+    events: {};
+};
+declare class __sveltets_Render<TData = any> {
+    props(): ReturnType<typeof $$render<TData>>['props'];
+    events(): ReturnType<typeof $$render<TData>>['events'];
+    slots(): ReturnType<typeof $$render<TData>>['slots'];
+    bindings(): "state" | "ref";
+    exports(): {};
+}
+interface $$IsomorphicComponent {
+    new <TData = any>(options: import('svelte').ComponentConstructorOptions<ReturnType<__sveltets_Render<TData>['props']>>): import('svelte').SvelteComponent<ReturnType<__sveltets_Render<TData>['props']>, ReturnType<__sveltets_Render<TData>['events']>, ReturnType<__sveltets_Render<TData>['slots']>> & {
+        $$bindings?: ReturnType<__sveltets_Render<TData>['bindings']>;
+    } & ReturnType<__sveltets_Render<TData>['exports']>;
+    <TData = any>(internal: unknown, props: ReturnType<__sveltets_Render<TData>['props']> & {}): ReturnType<__sveltets_Render<TData>['exports']>;
+    z_$$bindings?: ReturnType<__sveltets_Render<any>['bindings']>;
+}
+declare const TooltipContext: $$IsomorphicComponent;
+type TooltipContext<TData = any> = InstanceType<typeof TooltipContext<TData>>;
+export default TooltipContext;

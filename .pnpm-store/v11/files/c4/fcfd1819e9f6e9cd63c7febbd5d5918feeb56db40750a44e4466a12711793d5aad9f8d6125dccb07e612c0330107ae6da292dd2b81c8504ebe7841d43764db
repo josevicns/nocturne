@@ -1,0 +1,413 @@
+// src/lib/plugin/index.ts
+import { resolve, join as join3, dirname } from "path";
+import { existsSync as existsSync2 } from "fs";
+import { fileURLToPath } from "url";
+import sirv from "sirv";
+
+// src/lib/plugin/middleware.ts
+import { join as join2 } from "path";
+
+// src/lib/plugin/po-parser.ts
+import { po } from "gettext-parser";
+import { readFileSync, writeFileSync, readdirSync, existsSync } from "fs";
+import { join, basename } from "path";
+function parsePoFile(filePath) {
+  if (!existsSync(filePath)) {
+    throw new Error(`File not found: ${filePath}`);
+  }
+  const content = readFileSync(filePath);
+  const parsed = po.parse(content);
+  const translations = [];
+  for (const [context, messages] of Object.entries(parsed.translations)) {
+    for (const [msgid, data] of Object.entries(messages)) {
+      if (!msgid) continue;
+      const entry = data;
+      translations.push({
+        msgid,
+        msgstr: entry.msgstr?.[0] || "",
+        context: context || void 0,
+        comments: entry.comments,
+        fuzzy: entry.comments?.flag?.includes("fuzzy") || false
+      });
+    }
+  }
+  return translations;
+}
+function savePoFile(filePath, updates) {
+  if (!existsSync(filePath)) {
+    throw new Error(`File not found: ${filePath}`);
+  }
+  const content = readFileSync(filePath);
+  const parsed = po.parse(content);
+  for (const update of updates) {
+    const context = update.context || "";
+    if (parsed.translations[context]?.[update.msgid]) {
+      parsed.translations[context][update.msgid].msgstr = [update.msgstr];
+      if (update.fuzzy !== void 0) {
+        const comments = parsed.translations[context][update.msgid].comments || {};
+        if (update.fuzzy) {
+          comments.flag = "fuzzy";
+        } else {
+          delete comments.flag;
+        }
+        parsed.translations[context][update.msgid].comments = comments;
+      }
+    }
+  }
+  const compiled = po.compile(parsed);
+  writeFileSync(filePath, compiled);
+}
+function updateTranslation(filePath, msgid, msgstr, context) {
+  savePoFile(filePath, [{ msgid, msgstr, context }]);
+}
+function findPoFiles(localesDir) {
+  if (!existsSync(localesDir)) {
+    return [];
+  }
+  const files = readdirSync(localesDir).filter((f) => f.endsWith(".po"));
+  return files.map((file) => {
+    const filePath = join(localesDir, file);
+    const code = basename(file, ".po");
+    const translations = parsePoFile(filePath);
+    const translated = translations.filter((t) => t.msgstr && !t.fuzzy).length;
+    const fuzzy = translations.filter((t) => t.fuzzy).length;
+    return {
+      code,
+      name: getLanguageName(code),
+      path: filePath,
+      translations,
+      progress: {
+        total: translations.length,
+        translated,
+        fuzzy
+      }
+    };
+  });
+}
+function getLanguageStats(localesDir) {
+  const languages = findPoFiles(localesDir);
+  return languages.map((lang) => ({
+    code: lang.code,
+    name: lang.name,
+    total: lang.progress.total,
+    translated: lang.progress.translated,
+    fuzzy: lang.progress.fuzzy,
+    untranslated: lang.progress.total - lang.progress.translated - lang.progress.fuzzy,
+    progress: lang.progress.total > 0 ? Math.round(lang.progress.translated / lang.progress.total * 100) : 0
+  }));
+}
+function getLanguageName(code) {
+  const names = {
+    en: "English",
+    es: "Spanish",
+    fr: "French",
+    de: "German",
+    it: "Italian",
+    pt: "Portuguese",
+    "pt-BR": "Portuguese (Brazil)",
+    ja: "Japanese",
+    ko: "Korean",
+    zh: "Chinese",
+    "zh-CN": "Chinese (Simplified)",
+    "zh-TW": "Chinese (Traditional)",
+    ru: "Russian",
+    ar: "Arabic",
+    nl: "Dutch",
+    pl: "Polish",
+    sv: "Swedish",
+    da: "Danish",
+    fi: "Finnish",
+    no: "Norwegian",
+    tr: "Turkish",
+    cs: "Czech",
+    hu: "Hungarian",
+    ro: "Romanian",
+    uk: "Ukrainian",
+    vi: "Vietnamese",
+    th: "Thai",
+    id: "Indonesian",
+    ms: "Malay",
+    he: "Hebrew",
+    hi: "Hindi"
+  };
+  return names[code] || code.toUpperCase();
+}
+
+// src/lib/plugin/middleware.ts
+async function parseBody(req) {
+  return new Promise((resolve2, reject) => {
+    let body = "";
+    req.on("data", (chunk) => body += chunk);
+    req.on("end", () => {
+      try {
+        resolve2(JSON.parse(body));
+      } catch {
+        reject(new Error("Invalid JSON"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+function sendJson(res, data, statusCode = 200) {
+  res.statusCode = statusCode;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(data));
+}
+function sendError(res, message, statusCode = 500) {
+  sendJson(res, { success: false, error: message }, statusCode);
+}
+function createApiMiddleware(options) {
+  const { localesDir } = options;
+  return async (req, res, next) => {
+    const url = new URL(req.url || "/", `http://${req.headers.host}`);
+    const path = url.pathname;
+    const method = req.method?.toUpperCase();
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (method === "OPTIONS") {
+      res.statusCode = 204;
+      res.end();
+      return;
+    }
+    try {
+      if (path === "/languages" && method === "GET") {
+        const stats = getLanguageStats(localesDir);
+        sendJson(res, { success: true, data: stats });
+        return;
+      }
+      const translationsMatch = path.match(/^\/translations\/([^/]+)$/);
+      if (translationsMatch && method === "GET") {
+        const langCode = translationsMatch[1];
+        const filePath = join2(localesDir, `${langCode}.po`);
+        try {
+          const translations = parsePoFile(filePath);
+          sendJson(res, { success: true, data: translations });
+        } catch (error) {
+          sendError(res, `Language not found: ${langCode}`, 404);
+        }
+        return;
+      }
+      if (translationsMatch && method === "PUT") {
+        const langCode = translationsMatch[1];
+        const filePath = join2(localesDir, `${langCode}.po`);
+        try {
+          const body = await parseBody(req);
+          const updates = Array.isArray(body) ? body : [body];
+          savePoFile(filePath, updates);
+          sendJson(res, { success: true, message: "Translations updated" });
+        } catch (error) {
+          sendError(res, error instanceof Error ? error.message : "Failed to update", 400);
+        }
+        return;
+      }
+      const singleMatch = path.match(/^\/translation\/([^/]+)\/(.+)$/);
+      if (singleMatch && method === "PUT") {
+        const langCode = singleMatch[1];
+        const msgid = decodeURIComponent(singleMatch[2]);
+        const filePath = join2(localesDir, `${langCode}.po`);
+        try {
+          const body = await parseBody(req);
+          updateTranslation(filePath, msgid, body.msgstr, body.context);
+          sendJson(res, { success: true, message: "Translation updated" });
+        } catch (error) {
+          sendError(res, error instanceof Error ? error.message : "Failed to update", 400);
+        }
+        return;
+      }
+      if (path === "/search" && method === "GET") {
+        const query = url.searchParams.get("q")?.toLowerCase() || "";
+        const lang = url.searchParams.get("lang");
+        const languages = findPoFiles(localesDir);
+        const results = [];
+        for (const language of languages) {
+          if (lang && language.code !== lang) continue;
+          for (const t of language.translations) {
+            if (t.msgid.toLowerCase().includes(query) || t.msgstr.toLowerCase().includes(query)) {
+              results.push({
+                lang: language.code,
+                msgid: t.msgid,
+                msgstr: t.msgstr,
+                context: t.context
+              });
+            }
+          }
+        }
+        sendJson(res, { success: true, data: results });
+        return;
+      }
+      sendError(res, "Not found", 404);
+    } catch (error) {
+      console.error("[lingo] API error:", error);
+      sendError(res, error instanceof Error ? error.message : "Internal server error");
+    }
+  };
+}
+
+// src/lib/plugin/index.ts
+var __filename = typeof __dirname !== "undefined" ? "" : fileURLToPath(import.meta.url);
+var __dirnameComputed = typeof __dirname !== "undefined" ? __dirname : dirname(__filename);
+function lingoPlugin(options = {}) {
+  const { route = "/_translations", localesDir = "./locales", production = false } = options;
+  let root;
+  let resolvedLocalesDir;
+  return {
+    name: "vite-plugin-lingo",
+    // Only apply in serve mode (unless production is enabled)
+    apply: production ? void 0 : "serve",
+    configResolved(config) {
+      root = config.root;
+      resolvedLocalesDir = resolve(root, localesDir);
+    },
+    configureServer(server) {
+      const cleanRoute = route.replace(/\/$/, "");
+      let uiPath = resolve(__dirnameComputed, "../ui-dist");
+      if (!existsSync2(uiPath)) {
+        uiPath = resolve(root, "dist/ui-dist");
+      }
+      console.log("[lingo] Looking for UI at:", uiPath);
+      console.log("[lingo] UI exists:", existsSync2(uiPath));
+      if (existsSync2(uiPath)) {
+        console.log("[lingo] Serving built UI from:", uiPath);
+        const serve = sirv(uiPath, {
+          dev: true,
+          single: true
+          // SPA mode
+        });
+        server.middlewares.use(cleanRoute, (req, res, next) => {
+          const reqWithOriginal = req;
+          if ((req.url === "/" || req.url === "") && reqWithOriginal.originalUrl && !reqWithOriginal.originalUrl.endsWith("/")) {
+            res.writeHead(302, { Location: cleanRoute + "/" });
+            res.end();
+            return;
+          }
+          if (req.url === "/favicon.ico") {
+            res.statusCode = 204;
+            res.end();
+            return;
+          }
+          if (req.url?.startsWith("/api")) {
+            return next();
+          }
+          serve(req, res, () => next());
+        });
+      } else {
+        server.middlewares.use(cleanRoute, (req, res, next) => {
+          if (req.url === "/favicon.ico") {
+            res.statusCode = 204;
+            res.end();
+            return;
+          }
+          if (req.url?.startsWith("/api")) {
+            return next();
+          }
+          res.setHeader("Content-Type", "text/html");
+          res.end(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>\u{1F30D} Lingo Translation Editor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; min-height: 100vh; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+    header { background: white; padding: 1rem 2rem; border-bottom: 1px solid #e0e0e0; margin-bottom: 2rem; }
+    h1 { font-size: 1.5rem; color: #333; }
+    .card { background: white; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .language { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; border-bottom: 1px solid #eee; }
+    .language:last-child { border-bottom: none; }
+    .progress { background: #e0e0e0; border-radius: 4px; height: 8px; width: 100px; overflow: hidden; }
+    .progress-bar { background: #4caf50; height: 100%; transition: width 0.3s; }
+    .loading { text-align: center; padding: 2rem; color: #666; }
+    .error { color: #f44336; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>\u{1F30D} Lingo Translation Editor</h1>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h2 style="margin-bottom: 1rem;">Languages</h2>
+      <div id="languages" class="loading">Loading...</div>
+    </div>
+  </div>
+  <script>
+    async function loadLanguages() {
+      try {
+        const res = await fetch('${cleanRoute}/api/languages');
+        const { data, error } = await res.json();
+        
+        if (error) throw new Error(error);
+        
+        const container = document.getElementById('languages');
+        if (!data || data.length === 0) {
+          container.innerHTML = '<p>No .po files found in the locales directory.</p>';
+          return;
+        }
+        
+        container.innerHTML = data.map(lang => \`
+          <div class="language">
+            <div>
+              <strong>\${lang.name}</strong>
+              <span style="color: #666; margin-left: 0.5rem;">(\${lang.code})</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <span>\${lang.translated}/\${lang.total} translated</span>
+              <div class="progress">
+                <div class="progress-bar" style="width: \${lang.progress}%"></div>
+              </div>
+            </div>
+          </div>
+        \`).join('');
+      } catch (err) {
+        document.getElementById('languages').innerHTML = 
+          '<p class="error">Error loading languages: ' + err.message + '</p>';
+      }
+    }
+    
+    loadLanguages();
+  </script>
+</body>
+</html>
+          `);
+        });
+      }
+      server.middlewares.use(
+        `${cleanRoute}/api`,
+        createApiMiddleware({
+          localesDir: resolvedLocalesDir,
+          root
+        })
+      );
+      const poGlob = join3(resolvedLocalesDir, "**/*.po");
+      server.watcher.add(poGlob);
+      server.watcher.on("change", (path) => {
+        if (path.endsWith(".po")) {
+          server.ws.send({
+            type: "custom",
+            event: "lingo:po-updated",
+            data: { path }
+          });
+          console.log(`[lingo] .po file updated: ${path}`);
+        }
+      });
+      const port = server.config.server.port || 5173;
+      const protocol = server.config.server.https ? "https" : "http";
+      const host = server.config.server.host || "localhost";
+      const hostString = typeof host === "string" ? host : "localhost";
+      const originalPrintUrls = server.printUrls;
+      server.printUrls = () => {
+        originalPrintUrls?.();
+        console.log(`  \x1B[32m\u279C\x1B[0m  \x1B[1mLingo:\x1B[0m ${protocol}://${hostString}:${port}${cleanRoute}`);
+      };
+    }
+  };
+}
+export {
+  lingoPlugin as default,
+  lingoPlugin
+};
+//# sourceMappingURL=index.js.map

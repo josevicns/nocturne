@@ -1,0 +1,6 @@
+import type { OpenAPIV3 } from 'openapi-types';
+import type { GeneratorConfig } from '../config.js';
+/**
+ * Generate the ApiClient wrapper class.
+ */
+export declare function generateApiClient(spec: OpenAPIV3.Document, config: GeneratorConfig): string;

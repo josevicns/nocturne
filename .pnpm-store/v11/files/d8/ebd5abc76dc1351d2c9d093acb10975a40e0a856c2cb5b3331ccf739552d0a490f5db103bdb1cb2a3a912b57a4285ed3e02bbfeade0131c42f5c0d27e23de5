@@ -1,0 +1,5 @@
+export declare function hashMessageId(messageId: string): string;
+export declare function parseEmailAddress(input: string): string;
+export declare function generateMessageId(fromAddress: string): string;
+export declare function stripHtml(html: string): string;
+//# sourceMappingURL=utils.d.ts.map

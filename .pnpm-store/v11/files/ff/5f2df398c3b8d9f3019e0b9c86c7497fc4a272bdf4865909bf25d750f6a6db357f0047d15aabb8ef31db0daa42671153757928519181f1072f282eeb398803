@@ -1,0 +1,59 @@
+import type { Snippet } from 'svelte';
+import type { CommonStyleProps, Without } from '../../utils/types.js';
+import { type Accessor } from '../../utils/common.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+import type { GeoState } from '../../states/geo.svelte.js';
+import type { CircleProps } from '../Circle/Circle.shared.svelte.js';
+export type Point = {
+    x: number;
+    y: number;
+    r: number;
+    xValue: any;
+    yValue: any;
+    data: any;
+    /** Index within array accessor (0 = start/low edge, 1 = end/high edge). Undefined for single-value points. */
+    edgeIndex?: number;
+};
+type Offset = number | ((value: number, context: any) => number) | undefined;
+export type PointsPropsWithoutHTML = {
+    /** Override data instead of using context */
+    data?: any;
+    /** Override `x` accessor from Chart context */
+    x?: Accessor;
+    /** Override `y` accessor from Chart context */
+    y?: Accessor;
+    /** Series key to use for accessor. */
+    seriesKey?: string;
+    /** Override `r` accessor from Chart context @default 5 */
+    r?: number;
+    /** The offset of the point in the x direction */
+    offsetX?: Offset;
+    /** The offset of the point in the y direction */
+    offsetY?: Offset;
+    children?: Snippet<[{
+        points: Point[];
+    }]>;
+} & CommonStyleProps;
+export type PointsProps = PointsPropsWithoutHTML & Omit<Without<CircleProps, PointsPropsWithoutHTML>, 'ref'>;
+/**
+ * Reactive state shared by every per-layer Points variant. Holds the
+ * computed `points` array from the chart context.
+ */
+export declare class PointsState {
+    #private;
+    ctx: ChartState;
+    geo: GeoState;
+    constructor(getProps: () => PointsProps);
+    series: import("../index.js").SeriesData<any, any> | undefined;
+    seriesAccessor: string | number | ((d: any) => any) | Accessor<any>[] | undefined;
+    stackAccessors: {
+        y0: (d: any) => number;
+        y1: (d: any) => number;
+        value: (d: any) => [number, number] | null;
+    } | null;
+    xAccessor: (d: any) => any;
+    yAccessor: (d: any) => any;
+    pointsData: any;
+    points: Point[];
+}
+export {};

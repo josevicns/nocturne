@@ -1,0 +1,34 @@
+import { IndexTracker, type LoadGroupPatt } from '../adapters.js';
+import type { CompiledElement } from '../compile.js';
+import { type Catalog, type CatalogStorage, type PluralRules } from '../storage.js';
+export type Compiled = {
+    hasPlurals: boolean;
+    items: CompiledElement[];
+};
+export type CompiledCatalogs = Map<string, Compiled>;
+/** shared states among multiple adapters handlers */
+export declare class SharedState {
+    ownerKey: string;
+    sourceLocale: string;
+    compiled: CompiledCatalogs;
+    indexTracker: IndexTracker;
+    storage: CatalogStorage;
+    catalog: Catalog;
+    pluralRules: PluralRules;
+    constructor(storage: CatalogStorage, ownerKey: string, sourceLocale: string, allowNewItems: boolean);
+    load(locales: string[]): Promise<void>;
+    save(onlyReferenced: boolean): Promise<void>;
+}
+export type GranularState = {
+    id: number;
+    compiled: CompiledCatalogs;
+    indexTracker: IndexTracker;
+};
+export type WriteProxies = (groupPatterns: LoadGroupPatt[]) => Promise<void>;
+export declare class State {
+    #private;
+    readonly byID: Map<number, GranularState>;
+    readonly groupPatterns: LoadGroupPatt[];
+    constructor(writeProxies: WriteProxies, groupPatterns: LoadGroupPatt[]);
+    byFileCreate(filename: string, locales: string[], allowNewItems: boolean): Promise<GranularState>;
+}

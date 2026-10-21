@@ -1,0 +1,24 @@
+import PO from 'pofile';
+import { type PluralRule, type SaveData, type StorageFactory, type StorageFactoryOpts } from './storage.js';
+export type POItem = InstanceType<typeof PO.Item>;
+export type POFileOptions = {
+    /** in the form like 'path/to/dir/{locale}.po' */
+    location: string;
+};
+export declare const defaultOpts: POFileOptions;
+type POHeaders = Record<string, string | undefined>;
+export declare class POFile {
+    key: string;
+    opts: StorageFactoryOpts & POFileOptions;
+    filesByLoc: Map<string, string>;
+    files: string[];
+    fileExistsCache: Map<string, boolean>;
+    constructor(opts: StorageFactoryOpts & POFileOptions);
+    loadRaw(locale: string): Promise<PO | null>;
+    load(): Promise<SaveData>;
+    saveRaw(items: POItem[], headers: POHeaders, locale: string): Promise<void>;
+    save(data: SaveData): Promise<void>;
+    getHeaders(locale: string, pluralRule: PluralRule): POHeaders;
+}
+export declare function pofile(pofOpts?: Partial<POFileOptions>): StorageFactory;
+export {};

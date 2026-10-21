@@ -1,0 +1,17 @@
+import type { Adapter, AdapterArgs, CreateHeuristicOpts, DeepPartial, HeuristicFunc, LoaderChoice } from 'wuchale';
+import { type RuntimeCtxSv } from './transformer.js';
+export type { RuntimeCtxSv };
+export declare function createSvelteHeuristic(opts: CreateHeuristicOpts): HeuristicFunc;
+/** Default Svelte heuristic which extracts top level variable assignments as well, leading to `$derived` being auto added when needed */
+export declare const svelteDefaultHeuristic: HeuristicFunc;
+export declare const svelteKitDefaultHeuristic: HeuristicFunc;
+/** Default Svelte heuristic which requires `$derived` or `$derived.by` for top level variable assignments */
+export declare const svelteDefaultHeuristicDerivedReq: HeuristicFunc;
+type LoadersAvailable = 'svelte' | 'sveltekit';
+export type SvelteArgs = AdapterArgs<LoadersAvailable>;
+export declare const defaultArgs: SvelteArgs;
+export declare function getDefaultLoaderPath(loader: LoaderChoice<LoadersAvailable>, bundle: boolean): string | {
+    client: string;
+    server: string;
+} | null;
+export declare const adapter: (args?: DeepPartial<SvelteArgs>) => Adapter;

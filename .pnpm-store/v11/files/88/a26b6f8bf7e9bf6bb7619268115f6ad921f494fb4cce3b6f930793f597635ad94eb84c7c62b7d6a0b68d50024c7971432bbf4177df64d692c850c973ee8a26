@@ -1,0 +1,3 @@
+import type { Config } from '../config.js';
+export declare const checkHelp: string;
+export declare function check(config: Config, root: string, full: boolean): Promise<void>;

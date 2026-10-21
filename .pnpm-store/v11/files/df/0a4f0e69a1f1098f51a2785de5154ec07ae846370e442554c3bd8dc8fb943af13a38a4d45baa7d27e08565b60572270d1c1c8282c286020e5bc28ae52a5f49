@@ -1,0 +1,75 @@
+declare function _getStringWidth(str: string, style?: CSSStyleDeclaration): number | null;
+export declare const getStringWidth: typeof _getStringWidth;
+export type TextRectOptions = {
+    /** Horizontal placement of `x` within the text. @default 'start' */
+    textAnchor?: 'start' | 'middle' | 'end';
+    /** Vertical placement of `y` within the text. @default 'middle' */
+    verticalAnchor?: 'start' | 'middle' | 'end';
+    /** Font size (px) — measures the width and sets the height. @default 16 */
+    fontSize?: number;
+    /** Additional offset applied to `x` / `y` (matching `<Text>`'s `dx` / `dy`). */
+    dx?: number;
+    dy?: number;
+};
+/**
+ * Bounding box (`{ x, y, width, height }`) of `text` anchored at (`x`, `y`) — matching
+ * how `<Text>` positions it for the given `textAnchor`/`verticalAnchor`. Width is measured
+ * with the same memoized metrics as `<Text>` (falling back to a character-count estimate
+ * when the DOM is unavailable, e.g. during SSR), making it a convenient `bounds` for
+ * `occlude()`.
+ */
+export declare function getTextRect(text: string, x: number, y: number, options?: TextRectOptions): {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+export type RasterizeTextOptions = {
+    fontSize?: string;
+    fontWeight?: number;
+    fontFamily?: string;
+    textAlign?: CanvasTextAlign;
+    textBaseline?: CanvasTextBaseline;
+    spacing?: number;
+    width?: number;
+    height?: number;
+    x?: number;
+    y?: number;
+};
+export declare function rasterizeText(text: string, options?: RasterizeTextOptions): number[][];
+export declare function toTitleCase(str: string): string;
+export type TruncateTextOptions = {
+    /**
+     * The maximum pixel width (optional if maxChars is provided).
+     */
+    maxWidth?: number;
+    /**
+     * CSS style for width calculation
+     */
+    style?: CSSStyleDeclaration;
+    /**
+     * The maximum character count
+     */
+    maxChars?: number;
+    /**
+     * Where to place the ellipsis: 'start', 'middle', or 'end'
+     *
+     * @default 'end'
+     */
+    position?: 'start' | 'middle' | 'end';
+    /**
+     * The character(s) to use as the ellipsis
+     *
+     * @default '…'
+     */
+    ellipsis?: string;
+};
+/**
+ * Truncates a string to fit within a specified pixel width or character count.
+ * If the string's width exceeds the maxWidth, it will be truncated. If the character
+ * count exceeds maxChars, it will also be truncated.
+ *
+ * The ellipsis can be placed at the start, middle, or end of the string.
+ */
+export declare function truncateText(text: string, { position, ellipsis, maxWidth, style, maxChars }: TruncateTextOptions): string;
+export {};

@@ -1,0 +1,270 @@
+import type { SVGAttributes } from 'svelte/elements';
+import type { Without } from '../../utils/types.js';
+import type { DataDrivenStyleProps } from '../../utils/dataProp.js';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import { type FormatType, type FormatConfig } from '@layerstack/utils';
+import { type TruncateTextOptions } from '../../utils/string.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+import type { GeoState } from '../../states/geo.svelte.js';
+/**
+ * Check if a Text prop value is a data-space prop.
+ * Functions are always data props.
+ * Strings are data props unless they look like CSS values (e.g. "50%", "1em").
+ */
+export declare function isTextDataProp(value: any): boolean;
+export type TextSegment = {
+    value: string | number;
+    class?: string;
+};
+export type TextPropsWithoutHTML = {
+    /**
+     * Text value to render.
+     * - `number`: direct value
+     * - `string`: in data mode, treated as a data property name (e.g. `"label"` → `d.label`);
+     *   in pixel mode, used as literal text
+     * - `function(d)`: accessor called per data item to get the text value
+     *
+     * @default 0
+     */
+    value?: string | number | ((d: any) => string | number);
+    /**
+     * Array of styled text segments for inline mixed styling.
+     * Each segment has its own value and optional class.
+     * Mutually exclusive with `value`.
+     */
+    segments?: TextSegment[];
+    /**
+     * Maximum width to occupy (approximate as words are not split)
+     */
+    width?: number;
+    /**
+     * x position of the text.
+     * - `number`: pixel value (direct)
+     * - `string` (CSS value like "50%"): SVG position value
+     * - `string` (property name like "date"): data property, resolved via xScale
+     * - `function(d)`: accessor called per data item, result passed through xScale
+     *
+     * @default 0
+     */
+    x?: string | number | ((d: any) => any);
+    /**
+     * Initial x position of the text (pixel mode only).
+     *
+     * @default x
+     */
+    initialX?: string | number;
+    /**
+     * y position of the text.
+     * - `number`: pixel value (direct)
+     * - `string` (CSS value like "50%"): SVG position value
+     * - `string` (property name like "value"): data property, resolved via yScale
+     * - `function(d)`: accessor called per data item, result passed through yScale
+     *
+     * @default 0
+     */
+    y?: string | number | ((d: any) => any);
+    /**
+     * Initial y position of the text (pixel mode only).
+     *
+     * @default y
+     */
+    initialY?: string | number;
+    /**
+     * dx offset of the text
+     *
+     * @default 0
+     */
+    dx?: string | number;
+    /**
+     * dy offset of the text
+     *
+     * @default 0
+     */
+    dy?: string | number;
+    /**
+     * Desired "line height" of the text, implemented as y offsets
+     *
+     * @default "1em"
+     */
+    lineHeight?: string;
+    /**
+     * Font size of the text. A number is treated as pixels; a string passes
+     * through (e.g. `'12px'`, `'1.25em'`). When set, vertical centering math
+     * derives `capHeight` from this value automatically (as `fontSize * 0.71`),
+     * so per-item scaled labels with `verticalAnchor="middle"` align correctly
+     * without an explicit `capHeight` override.
+     */
+    fontSize?: number | string;
+    /**
+     * Cap height of the text — used by vertical anchor math to align the text
+     * to its visual center (as opposed to the font box). Defaults to `0.71em`,
+     * but if `fontSize` is set, defaults to `fontSize * 0.71` so centering
+     * stays correct as text scales.
+     *
+     * @default '0.71em' (or `fontSize * 0.71` when `fontSize` is set)
+     */
+    capHeight?: string;
+    /**
+     * Whether to scale the fontSize to accommodate the specified width
+     *
+     * @default false
+     */
+    scaleToFit?: boolean;
+    /**
+     * Horizontal text anchor
+     *
+     * @default 'start'
+     */
+    textAnchor?: 'start' | 'middle' | 'end' | 'inherit';
+    /**
+     * Vertical text anchor
+     *
+     * @default 'end'
+     */
+    verticalAnchor?: 'start' | 'middle' | 'end' | 'inherit';
+    /**
+     * The dominant baseline of the text.  Useful for aligning text to the baseline of the axis.
+     *
+     * @default 'auto'
+     */
+    dominantBaseline?: 'auto' | 'text-before-edge' | 'text-after-edge' | 'middle' | 'hanging' | 'ideographic' | 'mathematical';
+    /**
+     * Rotational angle of the text
+     */
+    rotate?: number;
+    /**
+     * A bindable reference to the wrapping `<svg>` element.
+     *
+     * @bindable
+     */
+    svgRef?: SVGElement;
+    /**
+     * Props to pass to the wrapping `<svg>` element.
+     */
+    svgProps?: Omit<SVGAttributes<SVGElement>, 'children'>;
+    /**
+     * A bindable reference to the inner `<text>` element
+     *
+     * @bindable
+     */
+    ref?: SVGTextElement;
+    /**
+     * Format the displayed value. When set with `motion` and a numeric `value`,
+     * the number will tween smoothly and be formatted for display.
+     */
+    format?: FormatType | FormatConfig;
+    /** Motion configuration (pixel mode only). */
+    motion?: MotionProp;
+    /**
+     * Whether to enable text truncation
+     */
+    truncate?: boolean | TruncateTextOptions;
+    /**
+     * A unique identifier for the SVG path element.
+     * One is generated by default if not provided.
+     *
+     */
+    pathId?: string;
+    /**
+     * The path to render the text along.
+     */
+    path?: string | null;
+    /**
+     * Specify the offset for the start of the text along the path.
+     * Can be a percentage ('50%') or a length value.
+     *
+     * @default '0%'
+     */
+    startOffset?: string | number;
+    /**
+     * Data array to iterate over in data mode.
+     * Falls back to chart context data when not provided.
+     */
+    data?: any[];
+    /**
+     * Key function for keyed {#each} rendering in data mode.
+     *
+     * @default (d, i) => i
+     */
+    key?: (d: any, index: number) => any;
+} & DataDrivenStyleProps;
+export type TextProps = TextPropsWithoutHTML & Without<SVGAttributes<SVGTextElement>, TextPropsWithoutHTML>;
+export declare function getPathLength(pathRef: SVGPathElement | undefined): number;
+/**
+ * Convert css value to pixel value (ex. 0.71em => 11.36)
+ */
+export declare function getPixelValue(cssValue: number | string): number;
+/**
+ * Resolve the cap-height used by vertical-anchor math.
+ *
+ * Priority:
+ *   1. Explicit `capHeight` prop
+ *   2. `fontSize * 0.71` when `fontSize` is set (keeps centering correct as
+ *      labels scale per-item)
+ *   3. `'0.71em'` (legacy default — only correct for ~16px text since
+ *      `getPixelValue` resolves `em` against 16, not the actual font-size)
+ */
+export declare function resolveCapHeight(capHeight: string | undefined, fontSize: number | string | undefined): number | string;
+export declare function isValidXOrY(xOrY: string | number | undefined): boolean;
+/** Build the standard `markInfo` payload used by every Text variant. */
+export declare function textMarkInfo(props: TextProps, dataMode: boolean): {
+    data?: undefined;
+    x?: undefined;
+    y?: undefined;
+    color?: undefined;
+} | {
+    data: any[] | undefined;
+    x: string | undefined;
+    y: string | undefined;
+    color: string | undefined;
+};
+/**
+ * Reactive state shared by every per-layer Text variant. Instantiate from
+ * each `Text.svg.svelte` / `Text.canvas.svelte` / `Text.html.svelte`
+ * component setup, passing a getter for the props.
+ *
+ * Per-layer specific bits (SVG `bind:this` refs, canvas's `render` function,
+ * canvas-specific style measurement) stay in their respective `.svelte` files.
+ */
+export declare class TextState {
+    #private;
+    chartCtx: ChartState;
+    geo: GeoState;
+    pathRef: SVGPathElement | undefined;
+    dataMode: boolean;
+    resolvedItems: {
+        d: any;
+        key: any;
+        x: number;
+        y: number;
+    }[];
+    resolveTextPosition(d: any): {
+        x: number;
+        y: number;
+    };
+    resolveTextValue(d: any): string;
+    get motionX(): any;
+    get motionY(): any;
+    resolvedWidth: number | undefined;
+    truncateConfig: TruncateTextOptions | boolean;
+    rawText: string;
+    textValue: string;
+    wordsByLines: {
+        words: string[];
+        width?: number;
+    }[];
+    lineCount: number;
+    startDy: number;
+    dataModeStartDy: number;
+    scaleTransform: string;
+    rotateTransform: string;
+    transform: string;
+    staticFill: string | undefined;
+    staticFillOpacity: number | undefined;
+    staticStroke: string | undefined;
+    staticStrokeWidth: number | undefined;
+    staticOpacity: number | undefined;
+    staticClassName: string | undefined;
+    constructor(getProps: () => TextProps);
+}
+export type { TruncateTextOptions } from '../../utils/string.js';

@@ -1,0 +1,859 @@
+// $$ cd .. && npm run test
+import { tsPlugin } from '@sveltejs/acorn-typescript';
+import { Parser } from 'acorn';
+import MagicString from 'magic-string';
+import { restoreCommentDirectives, runtimeVars, updateCommentDirectives, varNames, } from '../adapter-utils/index.js';
+import { defaultHeuristicFuncOnly, getKey, newMessage } from '../adapters.js';
+import InertVisitors from './inertvisitors.js';
+export const scriptParseOptions = {
+    sourceType: 'module',
+    ecmaVersion: 'latest',
+    locations: true,
+    // relaxed because checking correctness is not the focus here
+    allowReturnOutsideFunction: true,
+    allowAwaitOutsideFunction: true,
+    allowSuperOutsideMethod: true,
+    allowImportExportEverywhere: true,
+};
+const ScriptParser = Parser.extend(tsPlugin());
+export function scriptParseOptionsWithComments() {
+    let accumulateComments = [];
+    const comments = [];
+    return [
+        {
+            ...scriptParseOptions,
+            // parse comments for when they are not part of the AST
+            onToken: token => {
+                if (accumulateComments.length) {
+                    comments[token.start] = accumulateComments;
+                }
+                accumulateComments = [];
+            },
+            onComment: (block, comment) => {
+                accumulateComments.push({
+                    type: block ? 'Block' : 'Line',
+                    value: comment,
+                    start: -1,
+                    end: -1,
+                });
+            },
+        },
+        comments,
+    ];
+}
+export function parseScript(content) {
+    const [opts, comments] = scriptParseOptionsWithComments();
+    return [ScriptParser.parse(content, opts), comments];
+}
+const extendPropDownTypes = [
+    'Literal',
+    'TemplateLiteral',
+    'TaggedTemplateExpression',
+    'ObjectExpression',
+];
+export class Transformer extends InertVisitors {
+    index;
+    heuristic;
+    content;
+    /* for when the comments are not parsed as part of the AST */
+    comments = [];
+    mstr;
+    patterns;
+    matchUrl;
+    initReactive;
+    initRuntime;
+    currentRtVar;
+    vars;
+    // state
+    commentDirectives = {};
+    heuristciDetails = { file: '', scope: 'script', insideProgram: true };
+    /** .start of the first statements in their respective parents, to put the runtime init before */
+    realBodyStarts = new Set();
+    patternMatchMods = 0; // for realBodyStarts
+    /** will be passed to decide which runtime variable to use */
+    runtimeCtx = {};
+    constructor(ctx, heuristic, patterns, rtConf, rtBaseVars = [varNames.rt]) {
+        super();
+        this.index = ctx.index;
+        this.content = ctx.content;
+        this.matchUrl = ctx.matchUrl;
+        this.heuristciDetails.file = ctx.filename;
+        this.heuristic = heuristic;
+        this.patterns = patterns;
+        this.mstr = new MagicString(this.content);
+        const topLevelUseReactive = typeof rtConf.useReactive === 'boolean'
+            ? rtConf.useReactive
+            : (rtConf.useReactive({
+                funcName: undefined,
+                nested: false,
+                file: ctx.filename,
+                ctx: this.runtimeCtx,
+            }) ?? false);
+        const vars = {};
+        // to enable the use of different runtime vars for different places, right now for svelte <script module>s
+        for (const baseVar of rtBaseVars) {
+            vars[baseVar] = {
+                reactive: runtimeVars(rtConf.reactive.wrapUse, baseVar),
+                plain: runtimeVars(rtConf.plain.wrapUse, baseVar),
+            };
+        }
+        this.currentRtVar = rtBaseVars[0];
+        this.vars = () => {
+            const useReactive = typeof rtConf.useReactive === 'boolean'
+                ? rtConf.useReactive
+                : (rtConf.useReactive({
+                    funcName: this.heuristciDetails.funcName ?? undefined,
+                    nested: this.heuristciDetails.funcIsNested ?? false,
+                    file: ctx.filename,
+                    ctx: this.runtimeCtx,
+                }) ?? topLevelUseReactive);
+            const currentVars = vars[this.currentRtVar];
+            return useReactive ? currentVars.reactive : currentVars.plain;
+        };
+        this.initReactive = (funcName, parentFunc) => rtConf.initReactive({
+            funcName,
+            nested: parentFunc != null,
+            file: ctx.filename,
+            ctx: this.runtimeCtx,
+        });
+        this.initRuntime = (funcName, parentFunc) => {
+            let initReactive = this.initReactive(funcName, parentFunc);
+            if (initReactive == null) {
+                return;
+            }
+            if (typeof rtConf.useReactive === 'boolean') {
+                initReactive = rtConf.useReactive; // should be consistent
+            }
+            const wrapInit = initReactive ? rtConf.reactive.wrapInit : rtConf.plain.wrapInit;
+            const expr = initReactive ? ctx.expr.reactive : ctx.expr.plain;
+            return `\nconst ${this.currentRtVar} = ${wrapInit(expr)};\n`;
+        };
+    }
+    fullHeuristicDetails(detailsBase) {
+        return {
+            ...this.heuristciDetails,
+            ...detailsBase,
+        };
+    }
+    getHeuristicMessageType(msg) {
+        const msgStr = msg.msgStr.join('\n');
+        if (!msgStr) {
+            // nothing to ask
+            return false;
+        }
+        if (this.commentDirectives.forceType === false) {
+            return false;
+        }
+        const heuRes = this.heuristic(msg) ?? defaultHeuristicFuncOnly(msg) ?? 'message';
+        if (this.commentDirectives.forceType == null && heuRes === 'url' && this.matchUrl(msgStr) == null) {
+            return false;
+        }
+        return this.commentDirectives.forceType || heuRes;
+    }
+    checkHeuristicAllowNew(msgStr, detailsBase) {
+        if (!msgStr) {
+            // nothing to ask
+            return [false, null];
+        }
+        const msg = newMessage({
+            msgStr: [msgStr],
+            details: this.fullHeuristicDetails(detailsBase),
+            context: this.commentDirectives.context,
+        });
+        const heuRes = this.getHeuristicMessageType(msg);
+        // not allowed here, or msg is new but new msgs are not allowed
+        if (!heuRes || !this.index.has(getKey(msg.msgStr, msg.context))) {
+            return [false, null];
+        }
+        msg.type = heuRes;
+        return [heuRes, msg];
+    }
+    literalRepl(msgInfo) {
+        const vars = this.vars();
+        const indexKey = getKey(msgInfo.msgStr, msgInfo.context);
+        const repl = `${vars.rtTrans}(${this.index.get(indexKey)})`;
+        if (msgInfo.type !== 'url') {
+            return repl;
+        }
+        return `${varNames.urlLocalize}(${repl}, ${vars.rtLocale})`;
+    }
+    visitLiteral(node, heuristicDetailsBase) {
+        if (typeof node.value !== 'string') {
+            return [];
+        }
+        const { start, end } = node;
+        const [pass, msgInfo] = this.checkHeuristicAllowNew(node.value, heuristicDetailsBase ?? { scope: 'script' });
+        if (!pass) {
+            return [];
+        }
+        this.mstr.update(start, end, this.literalRepl(msgInfo));
+        return [msgInfo];
+    }
+    visitArrayExpression(node) {
+        return node.elements.flatMap(elm => (elm ? this.visit(elm) : []));
+    }
+    visitSequenceExpression(node) {
+        return node.expressions.flatMap(n => this.visit(n));
+    }
+    visitObjectExpression(node) {
+        return node.properties.flatMap(n => this.visit(n));
+    }
+    visitObjectPattern(node) {
+        return node.properties.flatMap(n => this.visit(n));
+    }
+    visitRestElement(node) {
+        return this.visit(node.argument);
+    }
+    visitProperty(node) {
+        const msgs = this.visit(node.key);
+        let keyName = '[]';
+        let keyIsLiteral = false;
+        if (node.key.type === 'Identifier') {
+            keyName = node.key.name;
+        }
+        else if (node.key.type === 'Literal' && typeof node.key.value === 'string') {
+            keyIsLiteral = true;
+            keyName = node.key.value;
+        }
+        if (msgs.length && keyIsLiteral && !node.computed) {
+            this.mstr.appendRight(node.key.start, '[');
+            this.mstr.appendLeft(node.key.end, ']');
+        }
+        const extendPropDown = extendPropDownTypes.includes(node.value.type);
+        const prevProp = this.heuristciDetails.property;
+        if (extendPropDown) {
+            this.heuristciDetails.property = prevProp ? `${prevProp}.${keyName}` : keyName;
+        }
+        msgs.push(...this.visit(node.value));
+        if (extendPropDown) {
+            this.heuristciDetails.property = prevProp; // restore
+        }
+        return msgs;
+    }
+    visitSpreadElement(node) {
+        return this.visit(node.argument);
+    }
+    visitMemberExpression(node) {
+        return [...this.visit(node.object), ...this.visit(node.property)];
+    }
+    visitChainExpression(node) {
+        return this.visit(node.expression);
+    }
+    visitNewExpression(node) {
+        return node.arguments.flatMap(n => this.visit(n));
+    }
+    defaultVisitCallExpression(node) {
+        const msgs = this.visit(node.callee);
+        const currentCall = this.heuristciDetails.call;
+        this.heuristciDetails.call = this.getCalleeName(node.callee);
+        for (const arg of node.arguments) {
+            msgs.push(...this.visit(arg));
+        }
+        this.heuristciDetails.call = currentCall; // restore
+        return msgs;
+    }
+    visitCallExpression(node) {
+        if (node.callee.type !== 'Identifier') {
+            return this.defaultVisitCallExpression(node);
+        }
+        const calleeName = node.callee.name;
+        const pattern = this.patterns.find(p => p.name === calleeName);
+        if (!pattern) {
+            return this.defaultVisitCallExpression(node);
+        }
+        let iLastNonOther = pattern.args.length - 1; // after this no change will be made
+        for (; iLastNonOther >= 0; iLastNonOther--) {
+            if (pattern.args[iLastNonOther] !== 'other') {
+                break;
+            }
+        }
+        const msgs = [];
+        const updates = [];
+        const appends = [];
+        let lastArgEnd = null;
+        for (const [i, arg] of pattern.args.entries()) {
+            const argVal = node.arguments[i];
+            let argInsertIndex = 0; // for now
+            if (argVal == null) {
+                argInsertIndex = lastArgEnd ?? node.callee.end + 1;
+                if (lastArgEnd == null) {
+                    lastArgEnd = argInsertIndex;
+                }
+            }
+            else {
+                lastArgEnd = argVal.end;
+            }
+            const comma = i > 0 ? ', ' : '';
+            if (arg === 'other') {
+                if (argVal == null && i < iLastNonOther) {
+                    appends.push([argInsertIndex, `${comma}undefined`]);
+                }
+                continue;
+            }
+            if (arg === 'locale') {
+                if (argVal) {
+                    if (argVal.type !== 'Literal' || typeof argVal.value !== 'string') {
+                        continue;
+                    }
+                    updates.push([argVal.start, argVal.end, this.vars().rtLocale]);
+                }
+                else {
+                    appends.push([argInsertIndex, `${comma}${this.vars().rtLocale}`]);
+                }
+                continue;
+            }
+            if (arg === 'pluralFunc') {
+                if (argVal) {
+                    updates.push([argVal.start, argVal.end, this.vars().rtPlural]);
+                }
+                else {
+                    appends.push([argInsertIndex, `${comma}${this.vars().rtPlural}`]);
+                }
+                continue;
+            }
+            // message, always required
+            if (argVal == null) {
+                return this.defaultVisitCallExpression(node);
+            }
+            if (argVal.type === 'Literal') {
+                if (typeof argVal.value !== 'string') {
+                    return this.defaultVisitCallExpression(node);
+                }
+                const msgInfo = newMessage({
+                    msgStr: [argVal.value],
+                    details: this.fullHeuristicDetails({ scope: 'script' }),
+                    context: this.commentDirectives.context,
+                });
+                updates.push([argVal.start, argVal.end, this.literalRepl(msgInfo)]);
+                msgs.push(msgInfo);
+                continue;
+            }
+            if (argVal.type === 'TemplateLiteral') {
+                msgs.push(...this.visitTemplateLiteral(argVal, true));
+                continue;
+            }
+            if (argVal.type !== 'ArrayExpression') {
+                return this.defaultVisitCallExpression(node);
+            }
+            const candidates = [];
+            for (const elm of argVal.elements) {
+                if (!elm || elm.type !== 'Literal' || typeof elm.value !== 'string') {
+                    return this.defaultVisitCallExpression(node);
+                }
+                candidates.push(elm.value);
+            }
+            // plural(num, ['Form one', 'Form two'])
+            const msgInfo = newMessage({
+                msgStr: candidates,
+                details: this.fullHeuristicDetails({ scope: 'script' }),
+                context: this.commentDirectives.context,
+            });
+            const index = this.index.get(getKey(msgInfo.msgStr, msgInfo.context));
+            msgs.push(msgInfo);
+            updates.push([argVal.start, argVal.end, `${this.vars().rtTPlural}(${index})`]);
+        }
+        for (const [start, end, by] of updates) {
+            this.mstr.update(start, end, by);
+            this.patternMatchMods++;
+        }
+        for (const [index, insert] of appends) {
+            this.mstr.appendRight(index, insert);
+            this.patternMatchMods++;
+        }
+        return msgs;
+    }
+    visitBinaryExpression(node) {
+        return [...this.visit(node.left), ...this.visit(node.right)];
+    }
+    visitConditionalExpression(node) {
+        return [...this.visit(node.test), ...this.visit(node.consequent), ...this.visit(node.alternate)];
+    }
+    visitUnaryExpression(node) {
+        return this.visit(node.argument);
+    }
+    visitLogicalExpression(node) {
+        return [...this.visit(node.left), ...this.visit(node.right)];
+    }
+    visitAwaitExpression(node) {
+        return this.visit(node.argument);
+    }
+    visitAssignmentExpression(node) {
+        return [...this.visit(node.left), ...this.visit(node.right)];
+    }
+    visitAssignmentPattern(node) {
+        return [...this.visit(node.left), ...this.visit(node.right)];
+    }
+    visitForOfStatement(node) {
+        return [...this.visit(node.left), ...this.visit(node.right), ...this.visit(node.body)];
+    }
+    visitForInStatement(node) {
+        return [...this.visit(node.left), ...this.visit(node.right), ...this.visit(node.body)];
+    }
+    visitForStatement(node) {
+        const msgs = this.visit(node.body);
+        if (node.init) {
+            msgs.push(...this.visit(node.init));
+        }
+        if (node.test) {
+            msgs.push(...this.visit(node.test));
+        }
+        if (node.update) {
+            msgs.push(...this.visit(node.update));
+        }
+        return msgs;
+    }
+    getMemberChainName(node) {
+        let name = '';
+        if (node.object.type === 'Identifier') {
+            name = node.object.name;
+        }
+        else if (node.object.type === 'MemberExpression') {
+            name = this.getMemberChainName(node.object);
+        }
+        else {
+            name = `[${node.type}]`;
+        }
+        name += '.';
+        if (node.property.type === 'Identifier') {
+            name += node.property.name;
+        }
+        else if (node.property.type === 'MemberExpression') {
+            name += this.getMemberChainName(node.property);
+        }
+        else {
+            name = `[${node.type}]`;
+        }
+        return name;
+    }
+    getCalleeName(callee) {
+        if (callee.type === 'Identifier') {
+            return callee.name;
+        }
+        if (callee.type === 'MemberExpression') {
+            return this.getMemberChainName(callee);
+        }
+        return `[${callee.type}]`;
+    }
+    getActualExpression(expr) {
+        if (!expr) {
+            return null;
+        }
+        if (expr.type === 'TSAsExpression' || expr.type === 'TSTypeAssertion') {
+            return expr.expression;
+        }
+        return expr;
+    }
+    withUpdateTLDetails(visit) {
+        const atTopLevelDefn = this.heuristciDetails.insideProgram && !this.heuristciDetails.declaring;
+        const msgs = visit(atTopLevelDefn);
+        if (atTopLevelDefn) {
+            this.heuristciDetails.topLevelCall = undefined; // reset
+            this.heuristciDetails.declaring = undefined;
+        }
+        return msgs;
+    }
+    visitExpressionStatement(node) {
+        return this.withUpdateTLDetails(topLevel => {
+            const expr = this.getActualExpression(node.expression);
+            if (topLevel) {
+                this.heuristciDetails.declaring = 'expression';
+                if (expr.type === 'CallExpression') {
+                    this.heuristciDetails.topLevelCall = this.getCalleeName(expr.callee);
+                }
+            }
+            return this.visit(expr);
+        });
+    }
+    // for e.g. svelte to surrounded with $derived
+    visitVariableDeclarator(node) {
+        return this.withUpdateTLDetails(topLevel => {
+            if (!node.init) {
+                return [];
+            }
+            const init = this.getActualExpression(node.init);
+            if (topLevel) {
+                if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') {
+                    this.heuristciDetails.declaring = 'function';
+                }
+                else {
+                    this.heuristciDetails.declaring = 'variable';
+                }
+            }
+            this.heuristciDetails.leftSide = true;
+            const msgs = this.visit(node.id);
+            this.heuristciDetails.leftSide = false;
+            if (topLevel && this.heuristciDetails.declaring === 'variable' && init.type === 'CallExpression') {
+                this.heuristciDetails.topLevelCall = this.getCalleeName(init.callee);
+            }
+            delete this.heuristciDetails.leftSide;
+            if (node.id.type === 'Identifier' &&
+                (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')) {
+                return [...msgs, ...this.visitFunctionBody(init.body, node.id.name, init.end)];
+            }
+            return [...msgs, ...this.visit(node.init)];
+        });
+    }
+    visitVariableDeclaration(node) {
+        return node.declarations.flatMap(n => this.visitVariableDeclarator(n));
+    }
+    visitExportNamedDeclaration(node) {
+        this.heuristciDetails.exported = true;
+        const msgs = node.declaration ? this.visit(node.declaration) : [];
+        delete this.heuristciDetails.exported;
+        return msgs;
+    }
+    visitExportDefaultDeclaration(node) {
+        return this.visitExportNamedDeclaration(node);
+    }
+    hasReturn(node) {
+        if (!node || typeof node !== 'object') {
+            return false;
+        }
+        if (Array.isArray(node)) {
+            return node.some(child => this.hasReturn(child));
+        }
+        if (node.type === 'FunctionDeclaration' ||
+            node.type === 'FunctionExpression' ||
+            node.type === 'ArrowFunctionExpression') {
+            return false;
+        }
+        if (node.type === 'ReturnStatement') {
+            return true;
+        }
+        return Object.values(node).some(value => this.hasReturn(value));
+    }
+    #updateBodyStart(bodyStart, newBodyStart) {
+        if (newBodyStart == null) {
+            return bodyStart;
+        }
+        if (bodyStart == null) {
+            return newBodyStart;
+        }
+        return bodyStart < newBodyStart ? bodyStart : newBodyStart;
+    }
+    visitStatementsNSaveRealBodyStart(nodes) {
+        // the runtime should be initialized:
+        // - before any extracted messages and function pattern match modifications: to make it available
+        // - before any return statement: to respect react hooks requirement of always calling the same
+        // - after any function calls: to handle the case where one of them is loading the catalogs
+        // - but before hoited function calls of the ones down below: to make it available at call time
+        const msgs = [];
+        let bodyStart = null;
+        const firstCalls = new Map();
+        for (const bod of nodes) {
+            const prevPatternMods = this.patternMatchMods;
+            const prevMsgsLen = msgs.length;
+            msgs.push(...this.visit(bod));
+            // get bodyStart
+            if (bod.type === 'ExpressionStatement') {
+                if (bod.expression.type === 'CallExpression') {
+                    const name = this.getCalleeName(bod.expression.callee);
+                    if (!firstCalls.has(name)) {
+                        firstCalls.set(name, bod.start);
+                    }
+                }
+            }
+            else if (bod.type === 'FunctionDeclaration') {
+                bodyStart = this.#updateBodyStart(bodyStart, firstCalls.get(bod.id.name));
+            }
+            else if (bod.type === 'VariableDeclaration') {
+                for (const decl of bod.declarations) {
+                    if (decl.id.type === 'Identifier' || decl.id.type === 'MemberExpression') {
+                        bodyStart = this.#updateBodyStart(bodyStart, firstCalls.get(this.getCalleeName(decl.id)));
+                    }
+                }
+            }
+            if (msgs.length > prevMsgsLen || this.patternMatchMods > prevPatternMods || this.hasReturn(bod)) {
+                bodyStart = this.#updateBodyStart(bodyStart, bod.start);
+            }
+        }
+        if (bodyStart) {
+            this.realBodyStarts.add(bodyStart);
+        }
+        return msgs;
+    }
+    getRealBodyStart(nodes) {
+        let nonLiteralStart = null;
+        for (const node of nodes) {
+            if (this.realBodyStarts.has(node.start)) {
+                return node.start;
+            }
+            if (nonLiteralStart == null &&
+                node.type !== 'ImportDeclaration' &&
+                (node.type !== 'ExpressionStatement' || node.expression.type !== 'Literal')) {
+                nonLiteralStart = node.start;
+            }
+        }
+        return nonLiteralStart ?? nodes[0]?.start;
+    }
+    visitFunctionBody(node, name, end) {
+        const prevFuncDef = this.heuristciDetails.funcName;
+        const prevFuncNested = this.heuristciDetails.funcIsNested;
+        this.heuristciDetails.funcName = name;
+        this.heuristciDetails.funcIsNested = name != null && prevFuncDef != null;
+        const prevPatternMods = this.patternMatchMods;
+        const msgs = this.visit(node);
+        if (msgs.length > 0 || this.patternMatchMods > prevPatternMods) {
+            const initRuntime = this.initRuntime(this.heuristciDetails.funcName, prevFuncDef ?? undefined);
+            if (initRuntime) {
+                if (node.type === 'BlockStatement') {
+                    this.mstr.prependLeft(this.getRealBodyStart(node.body) ?? node.start, initRuntime);
+                }
+                else {
+                    // get real start if surrounded by parens
+                    let start = node.start - 1;
+                    for (; start > 0; start--) {
+                        const char = this.content[start];
+                        if (char === '(') {
+                            break;
+                        }
+                        if (!/\s/.test(char)) {
+                            start = node.start;
+                            break;
+                        }
+                    }
+                    this.mstr.prependLeft(start, `{${initRuntime}return `);
+                    this.mstr.appendRight(end ?? node.end, '\n}');
+                }
+            }
+        }
+        this.heuristciDetails.funcIsNested = prevFuncNested;
+        this.heuristciDetails.funcName = prevFuncDef;
+        return msgs;
+    }
+    visitFunctionDeclaration(node) {
+        const declaring = this.heuristciDetails.declaring;
+        this.heuristciDetails.declaring = 'function';
+        const msgs = this.visitFunctionBody(node.body, node.id?.name ?? '');
+        this.heuristciDetails.declaring = declaring;
+        return msgs;
+    }
+    visitArrowFunctionExpression(node) {
+        return this.visitFunctionBody(node.body, '', node.end);
+    }
+    visitFunctionExpression(node) {
+        return this.visitFunctionBody(node.body, '');
+    }
+    visitBlockStatement(node) {
+        return this.visitStatementsNSaveRealBodyStart(node.body);
+    }
+    visitReturnStatement(node) {
+        return node.argument ? this.visit(node.argument) : [];
+    }
+    visitIfStatement(node) {
+        const msgs = this.visit(node.test);
+        msgs.push(...this.visit(node.consequent));
+        if (node.alternate) {
+            msgs.push(...this.visit(node.alternate));
+        }
+        return msgs;
+    }
+    visitWhileStatement(node) {
+        return [...this.visit(node.test), ...this.visit(node.body)];
+    }
+    visitDoWhileStatement(node) {
+        return [...this.visit(node.body), ...this.visit(node.test)];
+    }
+    visitLabeledStatement(node) {
+        return this.visit(node.body);
+    }
+    visitParenthesizedExpression(node) {
+        return this.visit(node.expression);
+    }
+    visitSwitchStatement(node) {
+        return node.cases.flatMap(n => this.visit(n));
+    }
+    visitSwitchCase(node) {
+        const msgs = node.consequent.flatMap(n => this.visit(n));
+        if (node.test) {
+            return [...this.visit(node.test), ...msgs];
+        }
+        return msgs;
+    }
+    visitYieldExpression(node) {
+        return node.argument ? this.visit(node.argument) : [];
+    }
+    visitClassDeclaration(node) {
+        const msgs = [];
+        const prevDecl = this.heuristciDetails.declaring;
+        this.heuristciDetails.declaring = 'class';
+        for (const body of node.body.body) {
+            if (body.type === 'MethodDefinition') {
+                msgs.push(...this.visit(body.key));
+                const methodName = this.content.slice(body.key.start, body.key.end);
+                if (body.value.type === 'FunctionExpression') {
+                    // and not e.g. TSDeclareMethod
+                    msgs.push(...this.visitFunctionBody(body.value.body, `${node.id.name}.${methodName}`));
+                }
+            }
+            else if (body.type === 'StaticBlock') {
+                const currentFuncDef = this.heuristciDetails.funcName;
+                this.heuristciDetails.funcName = `${node.id.name}.[static]`;
+                msgs.push(...body.body.flatMap(n => this.visit(n)));
+                this.heuristciDetails.funcName = currentFuncDef; // restore
+            }
+        }
+        this.heuristciDetails.declaring = prevDecl; // restore
+        return msgs;
+    }
+    visitTemplateLiteralQuasis(node, forHeuristic = false) {
+        const msgs = [];
+        let msgStr = node.quasis[0].value?.cooked ?? '';
+        const placeholders = [];
+        for (const [i, expr] of node.expressions.entries()) {
+            const quasi = node.quasis[i + 1];
+            msgStr += `{${i}}${quasi.value.cooked}`;
+            placeholders.push([i.toString(), this.content.slice(expr.start, expr.end)]);
+            if (forHeuristic) {
+                // skip modifications and sub visits
+                continue;
+            }
+            msgs.push(...this.visit(expr));
+            const { start, end } = quasi;
+            this.mstr.remove(start - 1, end);
+            if (i + 1 === node.expressions.length) {
+                continue;
+            }
+            this.mstr.update(end, end + 2, ', ');
+        }
+        const msgInfo = newMessage({
+            msgStr: [msgStr],
+            details: this.fullHeuristicDetails({ scope: 'script' }),
+            context: this.commentDirectives.context,
+            placeholders,
+        });
+        msgs.push(msgInfo);
+        return [msgInfo, forHeuristic ? 0 : this.index.get(getKey(msgInfo.msgStr, msgInfo.context)), msgs];
+    }
+    visitTemplateLiteral(node, heurDetails = false) {
+        let msgTyp = 'message';
+        let visitRes;
+        if (heurDetails === true) {
+            visitRes = this.visitTemplateLiteralQuasis(node);
+        }
+        else {
+            const [msgInfoHeu] = this.visitTemplateLiteralQuasis(node, true);
+            const [heuRes] = this.checkHeuristicAllowNew(msgInfoHeu.msgStr[0], heurDetails || { scope: 'script' });
+            if (!heuRes) {
+                return node.expressions.flatMap(n => this.visit(n));
+            }
+            msgTyp = heuRes;
+            visitRes = this.visitTemplateLiteralQuasis(node);
+        }
+        const [msgInfo, index, msgs] = visitRes;
+        msgInfo.type = msgTyp;
+        const { start: start0, end: end0 } = node.quasis[0];
+        let begin = `${this.vars().rtTrans}(${index}`;
+        let end = ')';
+        if (msgTyp === 'url') {
+            begin = `${varNames.urlLocalize}(${begin}`;
+            end += `, ${this.vars().rtLocale})`;
+        }
+        if (node.expressions.length) {
+            begin += ', [';
+            end = `]${end}`;
+            this.mstr.update(start0 - 1, end0 + 2, begin);
+            this.mstr.update(node.end - 1, node.end, end);
+        }
+        else {
+            this.mstr.update(start0 - 1, end0 + 1, begin + end);
+        }
+        return msgs;
+    }
+    visitTaggedTemplateExpression(node) {
+        const prevCall = this.heuristciDetails.call;
+        this.heuristciDetails.call = this.getCalleeName(node.tag);
+        let msgs = [];
+        const [msgInfoHeu] = this.visitTemplateLiteralQuasis(node.quasi, true);
+        const [heuRes] = this.checkHeuristicAllowNew(msgInfoHeu.msgStr[0], { scope: 'script' });
+        if (heuRes) {
+            const [msgInfo, index, msgsNew] = this.visitTemplateLiteralQuasis(node.quasi);
+            msgInfo.type = heuRes;
+            msgs = msgsNew;
+            this.mstr.appendRight(node.tag.start, `${this.vars().rtTransTag}(`);
+            const { start, end, expressions } = node.quasi;
+            if (expressions.length > 0) {
+                this.mstr.update(start, expressions[0].start, `, ${index}, [`);
+                this.mstr.update(end - 1, end, `])`);
+            }
+            else {
+                this.mstr.remove(start, start + 1);
+                this.mstr.update(start, end, `, ${index})`);
+            }
+        }
+        this.heuristciDetails.call = prevCall;
+        return msgs;
+    }
+    visitTryStatement(node) {
+        const msgs = this.visit(node.block);
+        if (node.handler) {
+            msgs.push(...this.visit(node.handler.body));
+        }
+        if (node.finalizer) {
+            msgs.push(...this.visit(node.finalizer));
+        }
+        return msgs;
+    }
+    visitTSAsExpression(node) {
+        return this.visit(node.expression);
+    }
+    visitTSTypeAssertion(node) {
+        return this.visit(node.expression);
+    }
+    visitTSSatisfiesExpression(node) {
+        return this.visit(node.expression);
+    }
+    visitProgram(node) {
+        this.heuristciDetails.insideProgram = true;
+        const msgs = this.visitStatementsNSaveRealBodyStart(node.body);
+        this.heuristciDetails.insideProgram = false;
+        return msgs;
+    }
+    visitWithCommentDirectives(node, func) {
+        const commentDirectives = { ...this.commentDirectives };
+        // for estree
+        const comments = this.comments[node.start];
+        // @ts-expect-error
+        for (const comment of node.leadingComments ?? comments ?? []) {
+            updateCommentDirectives(comment.value.trim(), this.commentDirectives);
+        }
+        if (this.commentDirectives.ignoreFile) {
+            return [];
+        }
+        const res = func();
+        restoreCommentDirectives(this.commentDirectives, commentDirectives);
+        return res;
+    }
+    visit(node) {
+        return this.visitWithCommentDirectives(node, () => {
+            if (this.commentDirectives.forceType === false) {
+                return [];
+            }
+            let msgs = [];
+            const visitor = this[`visit${node.type}`];
+            if (visitor != null) {
+                msgs = visitor.bind(this)(node);
+                // } else {
+                //     console.log(node)
+            }
+            return msgs;
+        });
+    }
+    finalize(msgs, hmrHeaderIndex, additionalHeader = '') {
+        return {
+            msgs,
+            output: header => {
+                this.mstr.prependRight(hmrHeaderIndex, `\n${header}\n${additionalHeader}\n`);
+                return {
+                    code: this.mstr.toString(),
+                    map: this.mstr.generateMap(),
+                };
+            },
+        };
+    }
+    transform() {
+        const [ast, comments] = parseScript(this.content);
+        this.comments = comments;
+        return this.finalize(this.visit(ast), this.getRealBodyStart(ast.body) ?? 0);
+    }
+}

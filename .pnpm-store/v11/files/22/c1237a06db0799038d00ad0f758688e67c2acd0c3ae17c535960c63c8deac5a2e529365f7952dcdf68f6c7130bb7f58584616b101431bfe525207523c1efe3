@@ -1,0 +1,16 @@
+/**
+ * Convert operationId to function name.
+ * "Note_GetNotes" -> "getNotes"
+ * "Note_CreateNote" -> "createNote"
+ * "ClockFaces_Delete" -> "remove" (reserved keyword handling)
+ */
+export declare function operationIdToFunctionName(operationId: string): string;
+/**
+ * Convert tag to camelCase file name with proper pluralization.
+ * "Note" -> "notes"
+ * "V4 Notes" -> "notes"
+ * "V4 Compression Lows" -> "compressionLows"
+ * "V1 Connector Status" -> "connectorStatus"
+ * "Battery" -> "batteries"
+ */
+export declare function tagToFileName(tag: string): string;

@@ -1,0 +1,63 @@
+export { MixedVisitor } from './mixed-visitor.js';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+export const varNames = {
+    rt: '_w_runtime_',
+    hmrUpdate: '_w_hmrUpdate_',
+    urlLocalize: '_w_localize_',
+};
+export function runtimeVars(wrapFunc, base = varNames.rt) {
+    return {
+        rtTrans: `${wrapFunc(base)}`,
+        rtTPlural: `${wrapFunc(base)}.p`,
+        rtPlural: `${wrapFunc(base)}._.p`,
+        rtLocale: `${wrapFunc(base)}.l`,
+        rtCtx: `${wrapFunc(base)}.c`,
+        rtTransCtx: `${wrapFunc(base)}.x`,
+        rtTransTag: `${wrapFunc(base)}.t`,
+        /** for when nesting, used in adapters with elements */
+        nestCtx: '_w_ctx_',
+    };
+}
+export function loaderPathResolver(importMetaUrl, baseDir, ext) {
+    const dir = dirname(fileURLToPath(importMetaUrl));
+    return (name) => resolve(dir, `${baseDir}/${name}.${ext}`);
+}
+export const commentPrefix = '@wc-';
+const commentDirectives = {
+    ignore: `${commentPrefix}ignore`,
+    ignoreFile: `${commentPrefix}ignore-file`,
+    include: `${commentPrefix}include`,
+    unit: `${commentPrefix}unit`,
+    url: `${commentPrefix}url`,
+    context: `${commentPrefix}context:`,
+};
+export function updateCommentDirectives(data, directives) {
+    if (data === commentDirectives.include) {
+        directives.forceType = 'message';
+    }
+    if (data === commentDirectives.url) {
+        directives.forceType = 'url';
+    }
+    if (data === commentDirectives.unit) {
+        directives.unit = true;
+    }
+    if (data === commentDirectives.ignore) {
+        directives.forceType = false;
+    }
+    if (data === commentDirectives.ignoreFile) {
+        directives.ignoreFile = true;
+    }
+    if (data.startsWith(commentDirectives.context)) {
+        directives.context = data.slice(commentDirectives.context.length).trim();
+    }
+}
+/** for restore. like Object.assign but in reverse, pull the keys on the target from the source */
+function pullDirective(target, source, key) {
+    target[key] = source[key];
+}
+export function restoreCommentDirectives(target, original) {
+    for (const key in target) {
+        pullDirective(target, original, key); // restore
+    }
+}

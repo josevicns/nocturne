@@ -1,0 +1,227 @@
+// $ node --import ../testing/resolve.ts %n.test.ts
+const wilds = ['/**', '/*', '*', '/?', '?']; // longer should be first
+// corresponsing indices
+const [DOUBLE, SINGLESL, SINGLE, OPTIONALSL, OPTIONAL] = [0, 1, 2, 3, 4];
+// meanings
+const [HASDOUBLE, HASSINGLE, SINGLESMIN, OPTIONALMAX, HASOPTIONAL] = [0, 1, 2, -2, -1];
+const DEFAULT_PREV_WILD = [false, -1, false, -1, false];
+export function compilePattern(pattern) {
+    const parts = [];
+    if (pattern.length > 1 && pattern.endsWith('/')) {
+        pattern = pattern.slice(0, -1);
+    }
+    let prevProps = DEFAULT_PREV_WILD.slice();
+    for (let i = 0; i < pattern.length; i++) {
+        let iWildInPatMin = -1;
+        let wildIdxMin = null;
+        for (let wi = 0; wi < wilds.length; wi++) {
+            const iWildInPat = pattern.indexOf(wilds[wi], i);
+            if (iWildInPat === -1 || (iWildInPatMin !== -1 && iWildInPat >= iWildInPatMin)) {
+                continue;
+            }
+            iWildInPatMin = iWildInPat;
+            wildIdxMin = wi;
+        }
+        if (wildIdxMin === null) {
+            parts.push(pattern.slice(i));
+            prevProps = DEFAULT_PREV_WILD.slice();
+            break;
+        }
+        if (iWildInPatMin > i) {
+            const slice = pattern.slice(i, iWildInPatMin);
+            if (slice !== '/' || i === 0) {
+                parts.push(slice);
+                prevProps = DEFAULT_PREV_WILD.slice();
+            }
+        }
+        if (wildIdxMin === DOUBLE) {
+            if (!prevProps[DOUBLE]) {
+                prevProps[DOUBLE] = true;
+                parts.push(HASDOUBLE);
+            }
+        }
+        else if (wildIdxMin === OPTIONAL) {
+            if (!prevProps[OPTIONAL]) {
+                prevProps[OPTIONAL] = true;
+                parts.push(HASOPTIONAL);
+            }
+        }
+        else if (wildIdxMin === OPTIONALSL) {
+            if (prevProps[OPTIONALSL] === -1) {
+                prevProps[OPTIONALSL] = parts.length;
+                parts.push(OPTIONALMAX);
+            }
+            else {
+                ;
+                parts[prevProps[OPTIONALSL]]--;
+            }
+        }
+        else if (wildIdxMin === SINGLE) {
+            if (!prevProps[SINGLE]) {
+                prevProps[SINGLE] = true;
+                parts.push(HASSINGLE);
+            }
+        }
+        else if (wildIdxMin === SINGLESL) {
+            if (prevProps[SINGLESL] === -1) {
+                prevProps[SINGLESL] = parts.length;
+                parts.push(SINGLESMIN);
+            }
+            else {
+                ;
+                parts[prevProps[SINGLESL]]++;
+            }
+        }
+        i = iWildInPatMin + wilds[wildIdxMin].length - 1;
+    }
+    return parts;
+}
+function slashCheckFails(url, fromI, toI, singles, optionals, double, single) {
+    if (fromI === toI) {
+        return singles > 0 || single;
+    }
+    if (singles === 0 && optionals === 0) {
+        return false;
+    }
+    let slashes = 0;
+    for (let i = url.indexOf('/', fromI); i !== -1 && i < toI; i = url.indexOf('/', i + 1)) {
+        slashes++;
+    }
+    if (toI - fromI === slashes) {
+        return true;
+    }
+    return slashes < singles || (!double && slashes - optionals > singles);
+}
+export function matchPattern(pattern, url) {
+    let endI = url.length;
+    if (endI > 1 && url.endsWith('/')) {
+        endI--;
+    }
+    let hasDoubleLast = false;
+    let singlesLast = 0;
+    let optionalsLast = 0;
+    let hasSingleLast = false;
+    let hasOptionalLast = false;
+    let lastI = 0;
+    const dynamics = [];
+    for (const patt of pattern) {
+        if (typeof patt === 'number') {
+            if (patt === HASDOUBLE) {
+                hasDoubleLast = true;
+            }
+            else if (patt <= OPTIONALMAX) {
+                optionalsLast = OPTIONALMAX - patt + 1;
+            }
+            else if (patt === HASOPTIONAL) {
+                hasOptionalLast = true;
+            }
+            else if (patt === HASSINGLE) {
+                hasSingleLast = true;
+            }
+            else {
+                singlesLast = patt - SINGLESMIN + 1;
+            }
+            continue;
+        }
+        const singles = singlesLast;
+        const optionals = optionalsLast;
+        const hasDouble = hasDoubleLast;
+        const hasSingle = hasSingleLast;
+        const hasOptional = hasOptionalLast;
+        singlesLast = 0;
+        optionalsLast = 0;
+        hasDoubleLast = false;
+        hasOptionalLast = false;
+        hasSingleLast = false;
+        const i = url.indexOf(patt, lastI);
+        const prevI = lastI;
+        lastI = i + patt.length;
+        if (i === -1) {
+            return false;
+        }
+        if (!hasDouble && !hasOptional && !hasSingle && singles === 0 && optionals === 0) {
+            if (i > 0) {
+                return false;
+            }
+            continue;
+        }
+        if (slashCheckFails(url, prevI, i, singles, optionals, hasDouble, hasSingle)) {
+            return false;
+        }
+        dynamics.push(url.slice(prevI, i));
+    }
+    if (lastI === endI) {
+        if (singlesLast > 0 || lastI === 0) {
+            return false;
+        }
+        if (!hasDoubleLast) {
+            return dynamics;
+        }
+    }
+    if (!hasDoubleLast && !hasOptionalLast && !hasSingleLast && singlesLast === 0 && optionalsLast === 0) {
+        return false;
+    }
+    if (slashCheckFails(url, lastI, endI, singlesLast, optionalsLast, hasDoubleLast, hasSingleLast)) {
+        return false;
+    }
+    dynamics.push(url.slice(lastI, endI));
+    return dynamics;
+}
+export function stringifyPattern(pattern, dynamics) {
+    let i = 0;
+    let lastIsDynamic = false;
+    let assembled = '';
+    for (const p of pattern) {
+        if (typeof p === 'string') {
+            assembled += p;
+            lastIsDynamic = false;
+            continue;
+        }
+        if (lastIsDynamic) {
+            continue;
+        }
+        assembled += dynamics[i++] ?? ''; // undefined when optional and []
+        lastIsDynamic = true;
+    }
+    return assembled;
+}
+const noMatchRes = { path: null, altPatterns: {}, params: [] };
+export function URLMatcher(manifest, locales) {
+    const manifestWithLocales = manifest.map(([pattern, localized]) => {
+        localized ??= locales.map(_ => pattern);
+        const locAndLocalizeds = locales.map((loc, i) => [loc, localized[i]]);
+        return [pattern, Object.fromEntries(locAndLocalizeds)];
+    });
+    return (url, locale) => {
+        if (locale === null) {
+            return noMatchRes;
+        }
+        for (const [pattern, altPatterns] of manifestWithLocales) {
+            const params = matchPattern(altPatterns[locale], url);
+            if (params) {
+                return { path: stringifyPattern(pattern, params), params, altPatterns };
+            }
+        }
+        return noMatchRes;
+    };
+}
+// public default, used when localized: true
+export const localizeDefault = (path, loc) => {
+    const localized = `/${loc}${path}`;
+    if (!localized.endsWith('/')) {
+        return localized;
+    }
+    return localized.slice(0, -1);
+};
+export const deLocalizeDefault = (path, locales) => {
+    let iSecondSlash = path.indexOf('/', 2);
+    if (iSecondSlash === -1) {
+        iSecondSlash = path.length;
+    }
+    const locale = path.slice(1, iSecondSlash);
+    if (!locales.includes(locale)) {
+        return [path, null];
+    }
+    const rest = path.slice(1 + locale.length);
+    return [rest || '/', locale];
+};

@@ -1,0 +1,19 @@
+/**
+ * Matches the Chat SDK CardElement / CardChild shapes.
+ * See: chat/dist/jsx-runtime-Wowykq7Z.d.ts
+ */
+export interface CardNode {
+    children?: CardNode[];
+    content?: string;
+    imageUrl?: string;
+    label?: string;
+    props?: Record<string, unknown>;
+    style?: string;
+    subtitle?: string;
+    title?: string;
+    type: string;
+    url?: string;
+    value?: string;
+}
+export declare function renderCard(card: CardNode): Promise<string>;
+//# sourceMappingURL=card-renderer.d.ts.map

@@ -1,0 +1,76 @@
+import { resolve } from 'node:path';
+import { defaultGemini } from './ai/gemini.js';
+export const defaultConfig = {
+    locales: ['en'],
+    fallback: {},
+    localesDir: 'src/locales',
+    adapters: {},
+    dev: 'refs',
+    ai: defaultGemini,
+    logLevel: 'info',
+};
+function deepFill(target, defaults) {
+    for (const [key, def] of Object.entries(defaults)) {
+        const value = target[key];
+        if ((value !== undefined && (typeof value !== 'object' || Array.isArray(value))) || value === null) {
+            continue;
+        }
+        const isArray = Array.isArray(def);
+        if (!def || isArray || typeof def !== 'object') {
+            if (value === undefined) {
+                target[key] = isArray ? [...def] : def;
+            }
+            continue;
+        }
+        // def is an object. force prepare an object on the destination
+        if (!value || typeof value !== 'object') {
+            target[key] = {};
+        }
+        deepFill(target[key], def);
+    }
+}
+/** mutates the target, and returns */
+export function fillDefaults(target, defaults) {
+    deepFill(target, defaults);
+    return target;
+}
+export function defineConfig(config) {
+    return config;
+}
+export const defaultConfigNames = ['js', 'mjs', 'ts', 'mts'].map(ext => `wuchale.config.${ext}`);
+const displayName = new Intl.DisplayNames(['en'], { type: 'language' });
+export const getLanguageName = (code) => displayName.of(code) ?? code;
+export function checkValidLocale(locale) {
+    try {
+        getLanguageName(locale);
+    }
+    catch {
+        throw new Error(`Invalid locale identifier: ${locale}`);
+    }
+}
+export async function getConfig(configPath) {
+    let module = null;
+    for (const confName of [configPath, ...defaultConfigNames]) {
+        if (!confName) {
+            continue;
+        }
+        const fileUrl = `file://${resolve(confName)}`;
+        try {
+            module = await import(fileUrl);
+            break;
+        }
+        catch (err) {
+            if (err.code !== 'ERR_MODULE_NOT_FOUND' || err.url !== fileUrl) {
+                throw err;
+            }
+        }
+    }
+    if (module == null) {
+        throw new Error('Config file not found');
+    }
+    const config = fillDefaults(module.default, defaultConfig);
+    for (const loc of config.locales) {
+        checkValidLocale(loc);
+    }
+    return config;
+}

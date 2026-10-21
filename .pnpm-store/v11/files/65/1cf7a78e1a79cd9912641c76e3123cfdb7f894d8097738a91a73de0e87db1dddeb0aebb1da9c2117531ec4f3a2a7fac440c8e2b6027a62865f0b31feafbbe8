@@ -1,0 +1,4 @@
+import type { XSchema } from '../types/schema.mjs';
+import type { XMutable } from './~mutable.mjs';
+import type { XStaticSchema } from './schema.mjs';
+export type XStatic<Value extends unknown, Schema extends XSchema = Value extends XSchema ? Value : {}, Mutable extends XSchema = XMutable<Schema>, Result extends unknown = XStaticSchema<[], Mutable, Mutable>> = Result;

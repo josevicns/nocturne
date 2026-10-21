@@ -1,0 +1,5 @@
+import type { CatalogModule } from '../runtime.js';
+import type { LoaderFunc } from './index.js';
+export type CatalogsByID = Record<number, CatalogModule>;
+/** No-side effect way to load catalogs. Can be used for multiple file IDs. */
+export declare function loadCatalogs(locale: string, loadIDs: number[], loadCatalog: LoaderFunc): Promise<CatalogsByID>;

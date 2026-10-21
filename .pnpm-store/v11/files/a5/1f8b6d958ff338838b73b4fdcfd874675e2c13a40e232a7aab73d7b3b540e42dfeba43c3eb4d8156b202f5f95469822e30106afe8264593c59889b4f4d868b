@@ -1,0 +1,142 @@
+import type { Snippet } from 'svelte';
+import type { SVGAttributes } from 'svelte/elements';
+import type { Without } from '../../utils/types.js';
+import type { DataProp, DataDrivenStyleProps } from '../../utils/dataProp.js';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import type { ChartState } from '../../states/chart.svelte.js';
+import type { GeoState } from '../../states/geo.svelte.js';
+export type CirclePropsWithoutHTML = {
+    /**
+     * The center x position of the circle.
+     * - `number`: pixel value (direct)
+     * - `string`: data property name, resolved via xScale
+     * - `function(d)`: accessor called per data item, result passed through xScale
+     *
+     * @default 0
+     */
+    cx?: DataProp;
+    /**
+     * The initial center x position of the circle (pixel mode only).
+     *
+     * @default cx
+     */
+    initialCx?: number;
+    /**
+     * The center y position of the circle.
+     * - `number`: pixel value (direct)
+     * - `string`: data property name, resolved via yScale
+     * - `function(d)`: accessor called per data item, result passed through yScale
+     *
+     * @default 0
+     */
+    cy?: DataProp;
+    /**
+     * The initial center y position of the circle (pixel mode only).
+     *
+     * @default cy
+     */
+    initialCy?: number;
+    /**
+     * The radius of the circle.
+     * - `number`: pixel value (direct)
+     * - `string`: data property name, resolved via rScale
+     * - `function(d)`: accessor called per data item, result passed through rScale
+     *
+     * @default 1
+     */
+    r?: DataProp;
+    /**
+     * The initial radius of the circle (pixel mode only).
+     *
+     * @default r
+     */
+    initialR?: number;
+    /**
+     * Data array to iterate over in data mode.
+     * Falls back to chart context data when not provided.
+     */
+    data?: any[];
+    /**
+     * Key function for keyed {#each} rendering in data mode.
+     *
+     * @default (d, i) => i
+     */
+    key?: (d: any, index: number) => any;
+    /**
+     * A bindable reference to the `<circle>` element (pixel mode only).
+     *
+     * @bindable
+     */
+    ref?: SVGCircleElement;
+    /** Motion configuration (pixel mode only). */
+    motion?: MotionProp;
+    /**
+     * Dashed-border pattern. Accepts a number (single dash length), a
+     * `[dash, gap, ...]` array, or a string (same syntax as SVG
+     * `stroke-dasharray`). HTML layer approximates via `border-style: dashed`.
+     */
+    dashArray?: number | number[] | string;
+    /** Children content to render.  Note: Only works for Html layers */
+    children?: Snippet;
+} & DataDrivenStyleProps;
+export type CircleProps = CirclePropsWithoutHTML & Without<SVGAttributes<Element>, CirclePropsWithoutHTML>;
+/**
+ * Resolve the cx/cy/r values for a single data item, going through
+ * either the geo projection or the chart's x/y/r scales.
+ */
+export declare function resolveCircle(d: any, props: {
+    cx?: DataProp;
+    cy?: DataProp;
+    r?: DataProp;
+}, chartCtx: ChartState, geo: GeoState): {
+    cx: number;
+    cy: number;
+    r: number;
+};
+/**
+ * Reactive state shared by every per-layer Circle variant. Instantiate from
+ * each `Circle.svg.svelte` / `Circle.canvas.svelte` / `Circle.html.svelte`
+ * component setup, passing a getter for the props. Exposes the derived
+ * computations + motion sources every layer needs.
+ *
+ * Per-layer specific bits (e.g. SVG's `bind:this` ref, HTML's
+ * `staticBorderWidth`, canvas's `render` function and canvas registration)
+ * stay in their respective `.svelte` files.
+ */
+export declare class CircleState {
+    #private;
+    chartCtx: ChartState<unknown, import("../../index.js").AnyScale, import("../../index.js").AnyScale>;
+    geo: GeoState;
+    dashArrayResolved: number[] | null;
+    dashArrayAttr: string | undefined;
+    dataMode: boolean;
+    resolvedItems: {
+        d: any;
+        key: any;
+        cx: number;
+        cy: number;
+        r: number;
+    }[];
+    staticFill: string | undefined;
+    staticFillOpacity: number | undefined;
+    staticStroke: string | undefined;
+    staticStrokeWidth: number | undefined;
+    staticOpacity: number | undefined;
+    staticClassName: string | undefined;
+    constructor(getProps: () => CircleProps);
+    get motionCx(): any;
+    get motionCy(): any;
+    get motionR(): any;
+}
+/** Build the standard `markInfo` payload used by every Circle variant. */
+export declare function circleMarkInfo(props: CircleProps, dataMode: boolean): {
+    data?: undefined;
+    x?: undefined;
+    y?: undefined;
+    color?: undefined;
+} | {
+    data: any[] | undefined;
+    x: string | undefined;
+    y: string | undefined;
+    color: string | undefined;
+};

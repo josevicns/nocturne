@@ -1,0 +1,41 @@
+import { mkdir, readFile, statfs, unlink, writeFile } from 'node:fs/promises';
+async function handleEnoent(func, defRet) {
+    try {
+        return await func();
+    }
+    catch (err) {
+        if (err.code !== 'ENOENT') {
+            throw err;
+        }
+        return defRet;
+    }
+}
+export const defaultFS = {
+    async read(file) {
+        return handleEnoent(() => readFile(file, 'utf-8'), null);
+    },
+    async write(file, content) {
+        await writeFile(file, content);
+    },
+    async mkdir(path) {
+        await mkdir(path, { recursive: true });
+    },
+    async exists(path) {
+        return handleEnoent(async () => {
+            await statfs(path);
+            return true;
+        }, false);
+    },
+    async unlink(path) {
+        return handleEnoent(async () => {
+            await unlink(path);
+            return true;
+        }, false);
+    },
+};
+export const readOnlyFS = {
+    ...defaultFS,
+    write: () => { },
+    mkdir: () => { },
+    unlink: () => true,
+};

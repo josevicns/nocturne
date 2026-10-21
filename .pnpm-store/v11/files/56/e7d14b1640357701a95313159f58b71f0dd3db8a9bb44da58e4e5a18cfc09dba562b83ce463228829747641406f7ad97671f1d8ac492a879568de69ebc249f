@@ -1,0 +1,3 @@
+import { type Config } from '../config.js';
+export declare const statusHelp: string;
+export declare function status(config: Config, root: string, json: boolean): Promise<void>;

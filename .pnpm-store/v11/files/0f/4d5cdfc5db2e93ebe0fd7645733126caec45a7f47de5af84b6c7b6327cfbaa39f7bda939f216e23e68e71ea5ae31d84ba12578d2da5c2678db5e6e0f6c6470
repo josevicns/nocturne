@@ -1,0 +1,91 @@
+import type { Snippet } from 'svelte';
+import type { HTMLAttributes } from 'svelte/elements';
+import type { Transition, TransitionParams, Without } from '../../utils/types.js';
+import type { DataProp } from '../../utils/dataProp.js';
+import { type MotionProp } from '../../utils/motion.svelte.js';
+import { fade } from 'svelte/transition';
+import { cubicIn } from 'svelte/easing';
+import type { ChartState } from '../../states/chart.svelte.js';
+import type { GeoState } from '../../states/geo.svelte.js';
+export type GroupPropsWithoutHTML<In extends Transition = Transition> = {
+    /**
+     * Translate x position of the group.
+     * - `number`: pixel value (direct)
+     * - `string`: data property name, resolved via xScale
+     * - `function(d)`: accessor called per data item, result passed through xScale
+     */
+    x?: DataProp;
+    /** Initial translate x (pixel mode only). @default x */
+    initialX?: number;
+    /**
+     * Translate y position of the group.
+     * - `number`: pixel value (direct)
+     * - `string`: data property name, resolved via yScale
+     * - `function(d)`: accessor called per data item, result passed through yScale
+     */
+    y?: DataProp;
+    /** Initial translate y (pixel mode only). @default y */
+    initialY?: number;
+    /**
+     * Data array to iterate over in data mode.
+     * Falls back to chart context data when not provided.
+     */
+    data?: any[];
+    /**
+     * Key function for keyed {#each} rendering in data mode.
+     *
+     * @default (d, i) => i
+     */
+    key?: (d: any, index: number) => any;
+    /** Center within chart. @default false */
+    center?: boolean | 'x' | 'y';
+    /**
+     * Prevent `touchmove` default, which can interfere with `pointermove` when
+     * used with `Tooltip`, for example.
+     *
+     * @default false
+     */
+    preventTouchMove?: boolean;
+    /** The opacity of the element. (0 to 1) */
+    opacity?: number;
+    children?: Snippet;
+    /**
+     * A reference to the rendered DOM element, which could be
+     * either nothing, a `<g>` element (when using `<Svg>`), or a `<div>` element
+     * (when using `<Html>`).
+     *
+     * @bindable
+     */
+    ref?: Element;
+    motion?: MotionProp;
+    /** Transition function for entering elements @default fade if motion is tweened */
+    transitionIn?: In;
+    /** Parameters for the transitionIn function @default { easing: cubicIn } */
+    transitionInParams?: TransitionParams<In>;
+};
+export type GroupProps<In extends Transition = Transition> = GroupPropsWithoutHTML<In> & Without<HTMLAttributes<Element>, GroupPropsWithoutHTML<In>>;
+/**
+ * Reactive state shared by every per-layer Group variant.
+ */
+export declare class GroupState {
+    #private;
+    chartCtx: ChartState;
+    geo: GeoState;
+    dataMode: boolean;
+    resolvedItems: {
+        d: any;
+        key: any;
+        x: number;
+        y: number;
+    }[];
+    trueX: number;
+    trueY: number;
+    get motionX(): any;
+    get motionY(): any;
+    transform: string | undefined;
+    defaultTransitionIn: typeof fade | (() => {});
+    defaultTransitionInParams: {
+        easing: typeof cubicIn;
+    };
+    constructor(getProps: () => GroupProps);
+}

@@ -1,0 +1,6 @@
+interface Props {
+    query: string;
+}
+declare const SearchBar: import("svelte").Component<Props, {}, "query">;
+type SearchBar = ReturnType<typeof SearchBar>;
+export default SearchBar;

@@ -1,0 +1,152 @@
+const OPEN = Symbol();
+const CLOSE = Symbol();
+const SELF_CLOSE = Symbol();
+const PLACEHOLDER = Symbol();
+const digitRange = ['0', '9'].map(d => d.charCodeAt(0));
+function extractSpecial(msgStr, start) {
+    const inPlaceHolder = msgStr[start] === '{';
+    const inTag = msgStr[start] === '<';
+    if (!inTag && !inPlaceHolder) {
+        return [null, null, start];
+    }
+    let digits = '';
+    let endChar = '';
+    let inClose = false;
+    let i = start + 1;
+    const beginChar = msgStr[i];
+    if (inTag && beginChar === '/') {
+        inClose = true;
+        i++;
+    }
+    while (i < msgStr.length) {
+        const char = msgStr[i];
+        const code = char.charCodeAt(0);
+        if (code < digitRange[0] || code > digitRange[1]) {
+            endChar = char;
+            break;
+        }
+        digits += char;
+        i++;
+    }
+    if (!digits) {
+        return [null, null, start];
+    }
+    const n = Number(digits);
+    if (inPlaceHolder) {
+        if (endChar !== '}') {
+            return [null, null, start];
+        }
+        return [PLACEHOLDER, n, i + 1];
+    }
+    if (endChar === '/' && msgStr[i + 1] === '>') {
+        return [SELF_CLOSE, n, i + 2];
+    }
+    if (endChar !== '>') {
+        return [null, null, start];
+    }
+    if (inClose) {
+        return [CLOSE, n, i + 1];
+    }
+    return [OPEN, n, i + 1];
+}
+function compile(msgStr, start = 0, parentTag = null) {
+    let curTxt = '';
+    const compiled = [];
+    let i = start;
+    const len = msgStr.length;
+    let currentOpenTag = null;
+    while (i < len) {
+        const char = msgStr[i];
+        const [type, n, newI] = extractSpecial(msgStr, i);
+        if (type === null) {
+            curTxt += char;
+            i++;
+            continue;
+        }
+        if (curTxt) {
+            compiled.push(curTxt);
+            curTxt = '';
+        }
+        if (type === OPEN) {
+            currentOpenTag = n;
+            const [subExt, newIc] = compile(msgStr, newI, n);
+            compiled.push([n, ...subExt]);
+            i = newIc;
+            continue;
+        }
+        if (type === CLOSE) {
+            if (currentOpenTag != null) {
+                if (currentOpenTag !== n) {
+                    return [compiled, 0, 'Closing a different tag'];
+                }
+                currentOpenTag = null;
+            }
+            else if (n === parentTag) {
+                break;
+            }
+            else {
+                return [compiled, 0, 'Closing a different tag'];
+            }
+        }
+        else if (type === SELF_CLOSE) {
+            compiled.push([n]);
+        }
+        else {
+            // placeholder
+            compiled.push(n);
+        }
+        i = newI;
+    }
+    if (curTxt) {
+        compiled.push(curTxt);
+    }
+    if (currentOpenTag !== null) {
+        return [compiled, 0, 'Unexpected end'];
+    }
+    return [compiled, i, null];
+}
+export function compileTranslation(msgStr, fallback) {
+    if (!msgStr) {
+        return fallback;
+    }
+    const [compiled, , err] = compile(msgStr);
+    if (err !== null) {
+        console.error('Compile error:', err, ':', msgStr);
+        return fallback;
+    }
+    if (compiled.length === 1 && typeof compiled[0] === 'string') {
+        return compiled[0];
+    }
+    return compiled;
+}
+export function isEquivalent(source, translation) {
+    const sourceStr = typeof source === 'string';
+    const translStr = typeof translation === 'string';
+    if (sourceStr || translStr) {
+        return sourceStr === translStr;
+    }
+    let stringsS = 0;
+    for (const elm of source) {
+        if (typeof elm === 'string') {
+            stringsS++;
+            continue;
+        }
+        if (typeof elm === 'number') {
+            if (!translation.includes(elm)) {
+                return false;
+            }
+            continue;
+        }
+        const transl = translation.find(t => Array.isArray(t) && t[0] === elm[0]);
+        if (transl == null || !isEquivalent(elm.slice(1), transl.slice(1))) {
+            return false;
+        }
+    }
+    let stringsT = 0;
+    for (const transl of translation) {
+        if (typeof transl === 'string') {
+            stringsT++;
+        }
+    }
+    return (stringsS === 0) === (stringsT === 0) && source.length - stringsS === translation.length - stringsT;
+}

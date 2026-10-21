@@ -1,0 +1,9 @@
+interface Props {
+    value: number;
+    max?: number;
+    showLabel?: boolean;
+    size?: 'sm' | 'md' | 'lg';
+}
+declare const ProgressBar: import("svelte").Component<Props, {}, "">;
+type ProgressBar = ReturnType<typeof ProgressBar>;
+export default ProgressBar;
