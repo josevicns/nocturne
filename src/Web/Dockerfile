@@ -15,11 +15,11 @@ COPY src/Web/packages/app/package.json packages/app/
 COPY src/Web/packages/bridge/package.json packages/bridge/
 COPY src/Web/packages/bot/package.json packages/bot/
 COPY src/Web/packages/portal/package.json packages/portal/
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Copy source — then reinstall to fix any symlinks overwritten by COPY
 COPY src/Web/ .
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Copy pre-generated API client (NSwag output from dotnet build)
 COPY src/Web/packages/app/src/lib/api/generated/ packages/app/src/lib/api/generated/
