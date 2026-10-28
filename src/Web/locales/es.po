@@ -5312,7 +5312,7 @@ msgstr "Icono del perfil"
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 #: src/lib/components/profile/ProfileEditDialog.svelte
 msgid "Blood Glucose Units"
-msgstr "Unidades de glucucemia"
+msgstr "Unidades de glucemia"
 
 #: src/lib/components/profile/ProfileCreateDialog.svelte
 msgid "Select units"
@@ -5469,7 +5469,7 @@ msgstr "Factor de sensibilidad a la insulina (ISF)"
 
 #: src/lib/components/profile/ProfileEditDialog.svelte
 msgid "How much your blood glucose drops per unit of insulin"
-msgstr "Cuánto disminuye la glucucemia por cada unidad de insulina"
+msgstr "Cuánto disminuye la glucemia por cada unidad de insulina"
 
 #: src/lib/components/profile/ProfileEditDialog.svelte
 msgid "Target Blood Glucose Range"
